@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+  xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+<item android:titleCondensed="@string/Sml" android:title="@string/Smaller" android:menuCategory="system" android:id="@+id/smaller"></item>
+<item android:id="@+id/bigger" android:title="@string/Bigger" android:menuCategory="system" android:titleCondensed="@string/Big"></item>
+</menu>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    >
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    >
+<Button
+    android:id="@+id/backButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="left"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    android:layout_weight="0.2"
+    android:text="&lt;&lt;"
+    />
+<Button
+    android:id="@+id/feedListButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="right"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    android:layout_weight="0"
+    android:text="Feeds"
+    />
+<Button
+    android:id="@+id/deleteButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="right"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    android:layout_weight="0.4"
+    android:text="Del"
+    />
+<Button
+    android:id="@+id/contentsButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="right"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    android:layout_weight="0"
+    android:text="ToC"
+    />
+<Button
+    android:id="@+id/fwdButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="right"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    android:layout_weight="0.2"
+    android:text="&gt;&gt;"
+    />
+</LinearLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="0px"
+    android:paddingBottom="0px"
+    >
+
+    <TextView
+        android:id="@+id/docName"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.7"
+        android:text=":-)" />
+
+<TextView
+    android:id="@+id/batteryLevel"
+    android:layout_width="40sp"
+    android:layout_height="wrap_content"
+    android:layout_weight="0"
+    android:text=" "
+    />
+</LinearLayout>
+
+<WebView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/webview"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    />
+
+</LinearLayout>

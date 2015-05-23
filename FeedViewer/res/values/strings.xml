@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FeedViewer</string>
+    <string name="Sml">Sml</string>
+    <string name="Smaller">Smaller</string>
+    <string name="Big">Big</string>
+    <string name="Bigger">Bigger</string>
+    <string name="percentPrompt">Scroll</string>
+    <string-array name="percent_array">
+        <item>Scroll</item>
+        <item>20</item>
+        <item>40</item>
+        <item>60</item>
+        <item>80</item>
+        <item>Bottom</item>
+    </string-array>
+</resources>
