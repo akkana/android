@@ -1,0 +1,6 @@
+
+    <menu xmlns:android="http://schemas.android.com/apk/res/android">
+        <item android:id="@+id/toc" android:menuCategory="system" android:titleCondensed="ToC" android:title="Table of Contents"></item>
+        <item android:id="@+id/back" android:menuCategory="system" android:titleCondensed="Back" android:title="Back"></item>
+        <item android:id="@+id/forward" android:menuCategory="system" android:titleCondensed="Fwd" android:title="Forward"></item>
+    </menu>
