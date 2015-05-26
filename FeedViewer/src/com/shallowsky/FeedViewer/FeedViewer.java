@@ -385,7 +385,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         if (onFeedsPage())
             return "feeds_scrollpos";
         String urlkey = url;
-        if (urlkey.startsWith("file://")) {
+        Log.d("FeedViewer", "url = '" + urlkey + "'");
+        if (! urlkey.isEmpty() && urlkey.startsWith("file://")) {
             urlkey = urlkey.substring(7);
         }
 
@@ -414,7 +415,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
         editor.commit();
     }
 
-    /* Read all values (except scroll positions for specific pages) from preferences */
+    /* Read all values (except scroll positions for specific pages) from pref */
     private void readPreferences() {
         mFontSize = mSharedPreferences.getInt("font_size", mFontSize);
         mBrightness = mSharedPreferences.getInt("brightness", mBrightness);
@@ -493,6 +494,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
         case R.id.smaller:
             mWebSettings.setDefaultFontSize(--mFontSize);
             showTextMessage("smaller:" + mFontSize);
+            return true;
+        case R.id.feedfetcher:
+            showFeedFetcherProgress();
             return true;
        }
         return false;
@@ -1053,4 +1057,26 @@ public class FeedViewer extends Activity implements OnGestureListener {
         IntentFilter batteryLevelFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         registerReceiver(batteryLevelReceiver, batteryLevelFilter);
     }
+
+    private void showFeedFetcherProgress() {
+        // Pop up a dialog:
+        //Toast.makeText(getApplicationContext(), "Showing FeedFetcher dialog",
+        //               Toast.LENGTH_LONG).show();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        String s = "";
+        for (int i = 0; i < 99; ++i) {
+            s += "\nThis is line " + i;
+        }
+        builder.setMessage(s)
+                .setNegativeButton("Dismiss",
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog,
+                                    int id) {
+                                dialog.cancel();
+                            }
+                        });
+        AlertDialog alert = builder.create();
+        alert.show();
+    }
 }
+
