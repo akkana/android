@@ -826,10 +826,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                         }
                                     }
 
-                                    // If we deleted anything, then
-                                    // make sure we're not going to
-                                    // remember the scroll position
-                                    // from the deleted page.
+                                    // If we deleted anything, then make sure
+                                    // make sure we're not going to remember
+                                    // scroll position from the deleted page.
                                     // deletePrefsFor(feeddir.getAbsolutePath());
                                     cleanUpScrollPrefs(feeddir.getAbsolutePath());
 
@@ -1075,8 +1074,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
     /*
     private void showFeedFetcherProgressOld() {
         // Pop up a dialog:
-        //Toast.makeText(getApplicationContext(), "Showing FeedFetcher dialog",
-        //               Toast.LENGTH_LONG).show();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         String s = "";
         for (int i = 0; i < 99; ++i) {
@@ -1101,13 +1098,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
         alert.setTitle("Feed fetcher progress");
         alert.setContentView(R.layout.feedfetcher);
 
-        //etc etc more handles, including buttons
-
         final TextView tv = (TextView)alert.findViewById(R.id.feedFetcherText);
 
         String s = "";
         for (int i = 0; i < 99; ++i) {
             s += "\nThis is line " + i;
+            if (i % 5 == 0)
+                s += " http://asdhjkjkadfshkjdslfshdjfklhsadjfklhdsajfklhsdakfdlhdkjashfkjdshfkjdsahfkjldhsakfj";
         }
         tv.setText(s);
 
