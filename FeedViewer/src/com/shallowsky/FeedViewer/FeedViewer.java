@@ -108,34 +108,38 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
         mWebView.setWebViewClient(new WebViewClient() {
             /**
-             * Sets up an onPageFinished() callback on mWebView, from which it positions the scroll.
+             * Sets up an onPageFinished() callback on mWebView,
+             * from which it positions the scroll.
              *
-             * <p>
-             * Jumping through the hoops. We'll delay the calling of scrollTo for N miliseconds after system
-             * loads the page. This is needed since onPageFinished() can be called before it loads whole page
-             * for some reason, so give the system some time...
-             * </p>
+             * Jumping through the hoops. We'll delay the calling of
+             * scrollTo for N miliseconds after system loads the page.
+             * This is needed since onPageFinished() can be called
+             * before it loads whole page for some reason, so give the
+             * system some time...
              */
             @Override
             public void onPageFinished(WebView webView, final String url) {
                 Log.d("FeedViewer", "onPageFinished " + url);
                 mWebView.postDelayed(new Runnable() {
-                    // XXX Eclipse gives me a "Method must override superclass method" error
-                    // if I include the Override. But will it work without it?
-                    //Override
+                    // XXX Eclipse gives me a "Method must override
+                    // superclass method" error if I include the
+                    // Override. But will it work without it? Override
                     public void run() {
                         Log.d("FeedViewer", "pageFinished postDelayed " + url);
                         int scrollpos = getScrollFromPreferences(url);
-                        // Scroll a little above the remembered position -- else rounding errors may
-                        // scroll us too far down to where the most recently read story isn't visible,
-                        // which is confusing to the user.
+                        // Scroll a little above the remembered
+                        // position -- else rounding errors may scroll
+                        // us too far down to where the most recently
+                        // read story isn't visible, which is
+                        // confusing to the user.
                         if (scrollpos > 0 && mWebView.getScrollY() == 0)
                             mWebView.scrollTo(0,
                                     (int)Math.round((mWebView.getContentHeight() * mWebView.getScale() * scrollpos - 1) / 100.0));
                         else if (scrollpos > 0)
                             Log.d("FeedViewer", "Not scrolling because page is already scrolled to " + mWebView.getScrollY());
                         mPageIsLoaded = true;
-                        Log.d("FeedViewer", "Page finished: " + url + " scrolled to " + scrollpos);
+                        Log.d("FeedViewer", "Page finished: " + url
+                              + " scrolled to " + scrollpos);
                     }
                 }, 300);
             }
@@ -159,8 +163,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 try {
                     URI uri = new URI(url);
                     if (uri.getScheme().equals("file")) {
-                        // If it's file: then we're moving between internal pages.
-                        // Go ahead and go to the link, saving settings.
+                        // If it's file: then we're moving between
+                        // internal pages. Go ahead and go to the
+                        // link, saving settings.
                         mLastUrl = url;
                         //showTextMessage("will try to load " + url);
                         //saveSettings();
@@ -637,17 +642,25 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 //showTextMessage("Already on feeds");
                 return;
             }
+
             // Now we know we have a location of some sort. Where is it?
             URI uri = new URI(getPathForURI());
             final File filepath = new File(uri.getPath());
-            String upup = filepath.getParentFile().getParentFile().getParentFile().getName();
-            // Unfortunately WebView doesn't handle history properly for generated pages,
-            // so canGoBack() will return true when back would lead to the feeds list
-            // (even though we set the history entry to null),
-            // but then goBack() will fail since it's forgotten the generated data.
-            // So intercept the case where we're on a ToC page and back would lead
-            // to the feeds list.
-            if (upup.equals("feeds") && filepath.getName().equals("index.html")) {
+            String upup = filepath.getParentFile().getParentFile()
+                .getParentFile().getName();
+            Log.d("FeedViewer", "upup = " + upup);
+
+            // Unfortunately WebView doesn't handle history properly
+            // for generated pages, so canGoBack() will return true
+            // when back would lead to the feeds list (even though we
+            // set the history entry to null), but then goBack() will
+            // fail since it's forgotten the generated data. So
+            // intercept the case where we're on a ToC page and back
+            // would lead to the feeds list.
+            Boolean upupFeeds = (upup.equals("feeds") ||
+                                 upup.equals("com.shallowsky.FeedViewer"));
+            if (upupFeeds &&
+                filepath.getName().equals("index.html")) {
                 loadFeedList();
                 return;
             }
@@ -657,8 +670,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 updateBatteryLevel();
                 return;
             }
-            else if (upup.equals("feeds")) {
-                // We're on a third-level page; go to the table of contents page for this feed.
+            else if (upupFeeds) {
+                // We're on a third-level page;
+                // go to the table of contents page for this feed.
                 tableOfContents();
                 return;
             }
@@ -785,18 +799,22 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                         int id) {
                                     deleteDir(feeddir);
 
-                                    // If this was the last feed and the parent (daydir)
-                                    // is now empty, delete it too.
-                                    // Don't want to do this in deleteDir() since
-                                    // it would have to check on every recursion.
+                                    // If this was the last feed and
+                                    // the parent (daydir) is now
+                                    // empty, delete it too. Don't
+                                    // want to do this in deleteDir()
+                                    // since it would have to check on
+                                    // every recursion.
                                     File parent = feeddir.getParentFile();
                                     File[] children = parent.listFiles();
                                     if (children.length == 0)
                                         parent.delete();
                                     else {
-                                        // There might still be files there, like LOG,
-                                        // but as long as there are no more subdirectories,
-                                        // it's time to delete.
+                                        // There might still be files
+                                        // there, like LOG, but as
+                                        // long as there are no more
+                                        // subdirectories, it's time
+                                        // to delete.
                                         Boolean hasChildDirs = false;
                                         for (int i=0; i < children.length; ++i)
                                             if (children[i].isDirectory()) {
@@ -808,9 +826,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                         }
                                     }
 
-                                    // If we deleted anything, then make sure we're not going
-                                    // to remember the scroll position from the deleted page.
-                                    //deletePrefsFor(feeddir.getAbsolutePath());
+                                    // If we deleted anything, then
+                                    // make sure we're not going to
+                                    // remember the scroll position
+                                    // from the deleted page.
+                                    // deletePrefsFor(feeddir.getAbsolutePath());
                                     cleanUpScrollPrefs(feeddir.getAbsolutePath());
 
                                     loadFeedList();
@@ -857,15 +877,17 @@ public class FeedViewer extends Activity implements OnGestureListener {
     /*
      * For some reason, this onTouchEvent() is needed to catch events on a WebView.
      * THANK YOU,
+
      * http://www.tutorialforandroid.com/2009/06/implement-gesturedetector-in-android.html
      * also, http://stackoverflow.com/questions/9519559/handle-touch-events-inside-webview-in-android
      *
      * For these gesture events, return true if we consumed the event,
-     * false if we want the event to be handled normally.
-     * Except of course for LongPress which for some reason doesn't let us return a status,
-     * so we have to go through absurd machinations to prevent triggering links.
-     * XXX Though, something to try for the LongPress case:
-     * XXX http://stackoverflow.com/questions/3329871/android-webview-long-press-not-on-link-i-e-in-white-space
+     * false if we want the event to be handled normally. Except of
+     * course for LongPress which for some reason doesn't let us
+     * return a status, so we have to go through absurd machinations
+     * to prevent triggering links.
+     * XXX Though, something to try for the LongPress case: XXX
+     * http://stackoverflow.com/questions/3329871/android-webview-long-press-not-on-link-i-e-in-white-space
      *
      * @see android.app.Activity#dispatchTouchEvent(android.view.MotionEvent)
     */
@@ -977,27 +999,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 (Math.abs(e1.getY() - e2.getY()) >
                  2 * Math.abs(e1.getX() - e2.getX()))) {
             if (distanceY != 0) {
-                /*
-                final int maxbright = 35;
-                int height = mWebView.getMeasuredHeight();
-                //int b = 80 - (int)(e2.getY() * 100 / mScreenHeight);
-                //int b = (int)((height - e2.getY()) * maxbright / 100);
-                int b = (int)((height - e2.getY()) * maxbright / height);
-                if (b < 1) {
-                    b = 1;
-                } else if (b > 100) {
-                    b = 100;
-                }
-                */
-                double factor = mScreenHeight * mScreenHeight / 100.;
-                int y = (int)(mScreenHeight - e2.getY()) - 100;
-                if (y < 0) y = 0;
-                    // subtract some for buttons etc.
-                int b = (int)(y * y / factor);
-                if (b > 100) b = 100;
-                if (b < 1) b = 1;
+                int y = (int)(mScreenHeight - e2.getY());
+                int b = (int)(y * 100 / mScreenHeight);
+                String factor = "";
                 showTextMessage("bright " + b + " (y = " + y
                                 + "/" + mScreenHeight + ", " + factor + ")");
+                Log.d("FeedViewer", "bright " + b + " (y = " + y
+                      + "/" + mScreenHeight + ", " + factor + ")");
                 setBrightness(b);
             }
             return true;
@@ -1011,7 +1019,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     // Try to disable the obnoxiously bright button backlight.
     // http://stackoverflow.com/questions/1966019/turn-off-buttons-backlight
-    // Alas, it does nothing (big surprise).
+    // Alas, it does nothing on Samsungs (big surprise).
     /*
     private void setDimButtons(boolean dimButtons) {
         Window window = getWindow();
