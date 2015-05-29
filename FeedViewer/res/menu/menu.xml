@@ -3,6 +3,19 @@
   xmlns:android="http://schemas.android.com/apk/res/android">
 
 
-<item android:titleCondensed="@string/Sml" android:title="@string/Smaller" android:menuCategory="system" android:id="@+id/smaller"></item>
-<item android:id="@+id/bigger" android:title="@string/Bigger" android:menuCategory="system" android:titleCondensed="@string/Big"></item>
+<item android:titleCondensed="feedfetcher"
+      android:title="Feed Fetcher"
+      android:menuCategory="system"
+      android:id="@+id/feedfetcher">
+</item>
+<item android:titleCondensed="@string/Sml"
+      android:title="@string/Smaller"
+      android:menuCategory="system"
+      android:id="@+id/smaller">
+</item>
+<item android:id="@+id/bigger"
+      android:title="@string/Bigger"
+      android:menuCategory="system"
+      android:titleCondensed="@string/Big">
+</item>
 </menu>

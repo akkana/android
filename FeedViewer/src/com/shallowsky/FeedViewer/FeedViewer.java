@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.Map;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -887,8 +888,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageDown(false);
             // Save scroll position in the current document.
-            // (This may save the previous position, not the newly scrolled to one,
-            // but at least we'll guarantee we've saved the current document.)
+            // (This may save the previous position, not the newly
+            // scrolled to one, but at least we'll guarantee we've
+            // saved the current document.)
             saveStateInPreferences(mWebView.getUrl());
            return true;
         }
@@ -940,7 +942,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
     // In practice this can be a pain since it can interfere with h scrolling.
     // Try to tune the velocity so that only real flings get caught here.
     public boolean onFling(MotionEvent e1, MotionEvent e2,
-            float velocityX, float velocityY) {
+                           float velocityX, float velocityY) {
+    /*
         //showTextMessage(Float.toString(velocityX));
 
         // If the event is too short, ignore it
@@ -959,17 +962,20 @@ public class FeedViewer extends Activity implements OnGestureListener {
             goForward();
             return true;
         }
+    */
         return false;
     }
 
-    // Set brightness if the user scrolls (drags) along the left edge of the screen
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
-            float distanceY) {
+    // Set brightness if the user scrolls (drags)
+    // along the left edge of the screen
+    public boolean onScroll(MotionEvent e1, MotionEvent e2,
+                            float distanceX, float distanceY) {
 
         final int XTHRESH = 30;
         if ((e1.getX() < XTHRESH || e2.getX() < XTHRESH) &&
                 (Math.abs(e1.getX() - e2.getX()) < XTHRESH) &&
-                (Math.abs(e1.getY() - e2.getY()) > 2 * Math.abs(e1.getX() - e2.getX()))) {
+                (Math.abs(e1.getY() - e2.getY()) >
+                 2 * Math.abs(e1.getX() - e2.getX()))) {
             if (distanceY != 0) {
                 /*
                 final int maxbright = 35;
@@ -990,8 +996,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 int b = (int)(y * y / factor);
                 if (b > 100) b = 100;
                 if (b < 1) b = 1;
-                showTextMessage("bright " + b + " (y = " + y + ")");
-                        //+ "/" + mScreenHeight + ", " + factor + ")");
+                showTextMessage("bright " + b + " (y = " + y
+                                + "/" + mScreenHeight + ", " + factor + ")");
                 setBrightness(b);
             }
             return true;
@@ -1058,7 +1064,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         registerReceiver(batteryLevelReceiver, batteryLevelFilter);
     }
 
-    private void showFeedFetcherProgress() {
+    /*
+    private void showFeedFetcherProgressOld() {
         // Pop up a dialog:
         //Toast.makeText(getApplicationContext(), "Showing FeedFetcher dialog",
         //               Toast.LENGTH_LONG).show();
@@ -1076,6 +1083,26 @@ public class FeedViewer extends Activity implements OnGestureListener {
                             }
                         });
         AlertDialog alert = builder.create();
+        alert.show();
+    }
+    */
+
+    private void showFeedFetcherProgress() {
+        // Pop up a dialog with a textview that we can modify later:
+        final Dialog alert = new Dialog(this);
+        alert.setTitle("Feed fetcher progress");
+        alert.setContentView(R.layout.feedfetcher);
+
+        //etc etc more handles, including buttons
+
+        final TextView tv = (TextView)alert.findViewById(R.id.feedFetcherText);
+
+        String s = "";
+        for (int i = 0; i < 99; ++i) {
+            s += "\nThis is line " + i;
+        }
+        tv.setText(s);
+
         alert.show();
     }
 }

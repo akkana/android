@@ -1,19 +1,45 @@
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.io.Reader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
+import android.os.AsyncTask;
+
+import java.net.URL;
+import java.net.HttpURLConnection;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+
+import android.content.Context;
+
+import android.util.Log;
+
+//import android.app.AlertDialog;
+
 // https://developer.android.com/training/basics/network-ops/index.html
 
 public class FeedFetcher {
+
+    Context mContext;
+    String mServerUrl;
+
+    public FeedFetcher(Context context, String serverurl) {
+        mContext = context;
+        mServerUrl = serverurl;
+    }
 
     // Before attempting to fetch the URL, makes sure that there is a
     // network connection; then calls AsyncTask.
     // https://developer.android.com/training/basics/network-ops/connecting.html
     public void fetch(String url) {
         // Gets the URL from the UI's text field.
-        String stringUrl = urlText.getText().toString();
         ConnectivityManager connMgr = (ConnectivityManager) 
-            getSystemService(Context.CONNECTIVITY_SERVICE);
+            mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
         if (networkInfo != null && networkInfo.isConnected()) {
-            new DownloadWebpageTask().execute(stringUrl);
+            new DownloadWebpageTask().execute(url);
         } else {
             displayMessage("No network connection available.");
         }
@@ -39,11 +65,13 @@ public class FeedFetcher {
         // onPostExecute displays the results of the AsyncTask.
         @Override
         protected void onPostExecute(String result) {
-            textView.setText(result);
-            // Actually, what should happen here is that the page is parsed,
-            // and if it's ready, we extract links and download recursively.
-            // Use a Set to make a list of unique URLs.
+            logProgress(result);
        }
+    }
+
+    private void logProgress(String s) {
+        // Should append to the textview in the FeedViewer dialog.
+        //blah, blah;
     }
 
     // Given a URL, establishes an HttpUrlConnection and retrieves
@@ -65,7 +93,7 @@ public class FeedFetcher {
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
-            Log.d(DEBUG_TAG, "The response is: " + response);
+            Log.d("FeedFetcher", "The response is: " + response);
             is = conn.getInputStream();
 
             // Convert the InputStream into a string
@@ -81,9 +109,18 @@ public class FeedFetcher {
         }
     }
 
-    public void displayMessage(String msg) {
-        textView.setText(msg);
+    // Reads an InputStream and converts it to a String.
+    public String readIt(InputStream stream, int len)
+                         throws IOException, UnsupportedEncodingException {
+        Reader reader = null;
+        reader = new InputStreamReader(stream, "UTF-8");        
+        char[] buffer = new char[len];
+        reader.read(buffer);
+        return new String(buffer);
     }
-}
 
+    public void displayMessage(String msg) {
+        //textView.setText(msg);
+        Log.d("FeedFetcher", msg);
+    }
 }
