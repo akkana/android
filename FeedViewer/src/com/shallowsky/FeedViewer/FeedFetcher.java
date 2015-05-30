@@ -1,3 +1,4 @@
+package com.shallowsky.FeedViewer;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;

@@ -64,20 +64,25 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     // /sdcard and getExternalStorageDirectory() aren't actually the SD card;
     // the sdcard is /sdcard/sdcard or /mnt/sdcard/external_storage,
-    // or, in KitKat, /mnt/extSdCard which has no relation to getExternalStorageDirectory.
+    // or, in KitKat, /mnt/extSdCard which has no relation to
+    // getExternalStorageDirectory.
     String mStorage = Environment.getExternalStorageDirectory().getPath();
     String mMainBasePath = null;
     String[] mBasePaths = {
-            mStorage + File.separator + "sdcard" + File.separator + "feeds",
-            mStorage + File.separator + "external_sd" + File.separator + "feeds",
-            "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer",
-            mStorage + File.separator + "feeds",
-            };
+        mStorage + File.separator + "sdcard" + File.separator + "feeds",
+        mStorage + File.separator + "external_sd" + File.separator + "feeds",
+        "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer",
+        mStorage + File.separator + "feeds",
+    };
 
     float mScreenWidth;
     float mScreenHeight;
-    long mScrollLock = 0;     // used for delays needed for scrolling and avoiding longpress
+    long mScrollLock = 0;  // used for delays for scrolling, avoiding longpress
     WebSettings mWebSettings; // Settings for the WebView, e.g. font size.
+
+    FeedFetcher mFeedFetcher = null;
+    Dialog mFeedFetcherDialog = null;
+    TextView mFeedFetcherText = null;
 
     // Params that can be saved
     int mFontSize = 18;
@@ -1000,11 +1005,10 @@ public class FeedViewer extends Activity implements OnGestureListener {
             if (distanceY != 0) {
                 int y = (int)(mScreenHeight - e2.getY());
                 int b = (int)(y * 100 / mScreenHeight);
-                String factor = "";
                 showTextMessage("bright " + b + " (y = " + y
-                                + "/" + mScreenHeight + ", " + factor + ")");
+                                + "/" + mScreenHeight + ")");
                 Log.d("FeedViewer", "bright " + b + " (y = " + y
-                      + "/" + mScreenHeight + ", " + factor + ")");
+                      + "/" + mScreenHeight + ")");
                 setBrightness(b);
             }
             return true;
@@ -1072,43 +1076,57 @@ public class FeedViewer extends Activity implements OnGestureListener {
     }
 
     /*
-    private void showFeedFetcherProgressOld() {
+    private void showFeedFetcherProgress() {
         // Pop up a dialog:
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
         String s = "";
+        if (mFeedFetcherDialog == null) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setMessage("foo")
+                .setNegativeButton("Dismiss",
+                                   new DialogInterface.OnClickListener() {
+                                       public void onClick(DialogInterface dialog,
+                                                           int id) {
+                                           dialog.hide();
+                                       }
+                                   });
+            mFeedFetcherDialog = builder.create();
+        }
         for (int i = 0; i < 99; ++i) {
             s += "\nThis is line " + i;
         }
-        builder.setMessage(s)
-                .setNegativeButton("Dismiss",
-                        new DialogInterface.OnClickListener() {
-                            public void onClick(DialogInterface dialog,
-                                    int id) {
-                                dialog.cancel();
-                            }
-                        });
-        AlertDialog alert = builder.create();
-        alert.show();
+        mFeedFetcherDialog.setMessage(s);
+        mFeedFetcherDialog.show();
     }
     */
 
     private void showFeedFetcherProgress() {
+        String s;
+
+        if (mFeedFetcher == null)
+            mFeedFetcher = new FeedFetcher(this, "");
+
         // Pop up a dialog with a textview that we can modify later:
-        final Dialog alert = new Dialog(this);
-        alert.setTitle("Feed fetcher progress");
-        alert.setContentView(R.layout.feedfetcher);
+        if (mFeedFetcherDialog != null) {
+            //mFeedFetcherDialog.ShowDialog();
+            s = "Re-showing the old dialog\n\n";
+        }
+        else {
+            mFeedFetcherDialog = new Dialog(this);
+            mFeedFetcherDialog.setTitle("Feed fetcher progress");
+            mFeedFetcherDialog.setContentView(R.layout.feedfetcher);
 
-        final TextView tv = (TextView)alert.findViewById(R.id.feedFetcherText);
+            mFeedFetcherText = (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
+            s = "Making a brand new dialog\n\n";
+        }
 
-        String s = "";
         for (int i = 0; i < 99; ++i) {
             s += "\nThis is line " + i;
             if (i % 5 == 0)
                 s += " http://asdhjkjkadfshkjdslfshdjfklhsadjfklhdsajfklhsdakfdlhdkjashfkjdshfkjdsahfkjldhsakfj";
         }
-        tv.setText(s);
+        mFeedFetcherText.setText(s);
 
-        alert.show();
+        mFeedFetcherDialog.show();
     }
 }
 
