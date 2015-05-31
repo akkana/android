@@ -10,6 +10,9 @@ import android.os.AsyncTask;
 
 import java.net.URL;
 import java.net.HttpURLConnection;
+
+import android.app.Activity;
+
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 
@@ -25,24 +28,42 @@ public class FeedFetcher {
 
     Context mContext;
     String mServerUrl;
+    FeedProgress mFeedProgress;
 
-    public FeedFetcher(Context context, String serverurl) {
+    public FeedFetcher(Context context, String serverurl, FeedProgress fp) {
         mContext = context;
+        mServerUrl = serverurl;
+        mFeedProgress = fp;
+
+        Log.d("FeedFetcher", "\n\nStarting FeedFetcher; logging progress");
+        logProgress("Starting FeedFetcher");
+    }
+
+    public void setServerURL(String serverurl) {
         mServerUrl = serverurl;
     }
 
-    // Before attempting to fetch the URL, makes sure that there is a
-    // network connection; then calls AsyncTask.
+    public void fetchFeeds() {
+        Log.d("FeedFetcher", "Trying to fetch feeds.");
+        fetch(mServerUrl + "/tmp/foo.html");
+    }
+
     // https://developer.android.com/training/basics/network-ops/connecting.html
     public void fetch(String url) {
-        // Gets the URL from the UI's text field.
+        Log.d("FeedFetcher", "Trying to fetch " + url);
+
+        // Before attempting to fetch the URL, makes sure the net's up:
         ConnectivityManager connMgr = (ConnectivityManager) 
             mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        Log.d("FeedViewer", "Got connectivity service: " + connMgr);
+        // Next line crashes. Why?
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
+
+        // If the net is up, start an async task to fetch the URL:
         if (networkInfo != null && networkInfo.isConnected()) {
             new DownloadWebpageTask().execute(url);
         } else {
-            displayMessage("No network connection available.");
+            logProgress("No network connection available.");
         }
     }
 
@@ -72,7 +93,16 @@ public class FeedFetcher {
 
     private void logProgress(String s) {
         // Should append to the textview in the FeedViewer dialog.
-        //blah, blah;
+        Log.d("FeedViewer:FeedFetcher", s);
+        // The call inside runOnUiThread doesn't see s,
+        // but it will see a new final string that's a copy of s:
+        final String ss = s;
+        ((Activity)mContext).runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mFeedProgress.log(ss);
+            }
+        });
     }
 
     // Given a URL, establishes an HttpUrlConnection and retrieves
@@ -83,6 +113,8 @@ public class FeedFetcher {
         // Only display the first 500 characters of the retrieved
         // web page content.
         int len = 500;
+
+        logProgress("Trying to download " + myurl);
         
         try {
             URL url = new URL(myurl);
@@ -94,7 +126,8 @@ public class FeedFetcher {
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
-            Log.d("FeedFetcher", "The response is: " + response);
+            Log.d("FeedViewer", "Response code  : " + response);
+            logProgress("Response code: " + response);
             is = conn.getInputStream();
 
             // Convert the InputStream into a string
@@ -118,10 +151,5 @@ public class FeedFetcher {
         char[] buffer = new char[len];
         reader.read(buffer);
         return new String(buffer);
-    }
-
-    public void displayMessage(String msg) {
-        //textView.setText(msg);
-        Log.d("FeedFetcher", msg);
     }
 }

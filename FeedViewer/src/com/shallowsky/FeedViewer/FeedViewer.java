@@ -1100,15 +1100,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
     */
 
     private void showFeedFetcherProgress() {
-        String s;
-
-        if (mFeedFetcher == null)
-            mFeedFetcher = new FeedFetcher(this, "");
 
         // Pop up a dialog with a textview that we can modify later:
-        if (mFeedFetcherDialog != null) {
+        if (mFeedFetcherDialog != null && mFeedFetcher != null) {
             //mFeedFetcherDialog.ShowDialog();
-            s = "Re-showing the old dialog\n\n";
+            mFeedFetcherText.append("\n\nRe-showing the old dialog\n");
         }
         else {
             mFeedFetcherDialog = new Dialog(this);
@@ -1116,17 +1112,20 @@ public class FeedViewer extends Activity implements OnGestureListener {
             mFeedFetcherDialog.setContentView(R.layout.feedfetcher);
 
             mFeedFetcherText = (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
-            s = "Making a brand new dialog\n\n";
-        }
 
-        for (int i = 0; i < 99; ++i) {
-            s += "\nThis is line " + i;
-            if (i % 5 == 0)
-                s += " http://asdhjkjkadfshkjdslfshdjfklhsadjfklhdsajfklhsdakfdlhdkjashfkjdshfkjdsahfkjldhsakfj";
+            String s = "Making a brand new dialog\n\n";
+            for (int i = 0; i < 10; ++i) {
+                s += "\nThis is line " + i;
+                if (i % 5 == 0)
+                    s += " http://asdhjkjkadfshkjdslfshdjfklhsadjfklhdsajfklhsdakfdlhdkjashfkjdshfkjdsahfkjldhsakfj";
+            }
+            mFeedFetcherText.setText(s);
+
+            mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
+                                           new FeedProgress(mFeedFetcherText));
+            mFeedFetcher.fetchFeeds();
         }
-        mFeedFetcherText.setText(s);
 
         mFeedFetcherDialog.show();
     }
 }
-
