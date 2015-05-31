@@ -37,13 +37,16 @@ package com.shallowsky.FeedViewer;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.io.Reader;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.BufferedReader;
 
 import android.os.AsyncTask;
 
 import java.net.URL;
 import java.net.HttpURLConnection;
+import java.net.URLEncoder;
 
 import android.app.Activity;
 
@@ -68,7 +71,7 @@ public class FeedFetcher {
         mServerUrl = serverurl;
         mFeedProgress = fp;
 
-        Log.d("FeedFetcher", "\n\nStarting FeedFetcher; logging progress");
+        Log.d("FeedFetcher", "\nStarting FeedFetcher; logging progress");
         logProgress("Starting FeedFetcher");
     }
 
@@ -94,8 +97,35 @@ public class FeedFetcher {
             return false;
         }
 
+        String urlrssURL = mServerUrl + "/feedme/testurlrss.cgi";
+        Boolean haveURLs = false;
+
+        // Read any saved URLs we need to pass to urlrss.
+        // Of course this should be relative to wherever we're reading feeds,
+        // or have several options of path. Eventually.
+        String feedfile = "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls";
+        try {
+            InputStream fis = new FileInputStream(feedfile);
+            InputStreamReader isr = new InputStreamReader(fis);
+                                                          //, Charset.forName("UTF-8"));
+            BufferedReader br = new BufferedReader(isr);
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (haveURLs)
+                    urlrssURL += "%0A";
+                else {
+                    urlrssURL += "?xtraurls=";
+                    haveURLs = true;
+                }
+                urlrssURL += URLEncoder.encode(line, "UTF-8");
+            }
+        } catch(Throwable t) {
+            logProgress("Couldn't read saved-urls");
+        }
+        logProgress("\nURLRSS URL is " + urlrssURL);
+
         mFetchTask = new FetchFeedsTask();
-        mFetchTask.execute();
+        mFetchTask.execute(urlrssURL);
 
         // Now wait for the task to complete.
         // The UI can still send a signal to us to stop.
@@ -115,19 +145,20 @@ public class FeedFetcher {
         @Override
         protected String doInBackground(String... urls) {
             // params comes from the execute() call: params[0] is the url.
-            String url = mServerUrl + "/feedme/testurlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0Ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0Ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0Ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted";
+            //String url = mServerUrl + "/feedme/testurlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0Ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0Ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0Ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted";
             String output;
             try {
-                output = downloadUrl(url);
+                output = downloadUrl(urls[0]);
                 return output;
             } catch (IOException e) {
-                return "Couldn't fetch " + url;
+                return "Couldn't fetch " + urls[0];
             }
         }
         // onPostExecute displays the results of the AsyncTask.
         // contents is the contents of the fetched web page.
         @Override
         protected void onPostExecute(String contents) {
+            logProgressOnUIThread("\nFetched initial file!\n");
             logProgressOnUIThread(contents);
         }
     }
@@ -160,7 +191,7 @@ public class FeedFetcher {
     */
 
     private void logProgress(String s) {
-        mFeedProgress.log(s);
+        mFeedProgress.log(s + "\n");
     }
 
     private void logProgressOnUIThread(String s) {
@@ -168,7 +199,7 @@ public class FeedFetcher {
         Log.d("FeedViewer:FeedFetcher", s);
         // The call inside runOnUiThread doesn't see s,
         // but it will see a new final string that's a copy of s:
-        final String ss = "(subthread) " + s;
+        final String ss = "(subthread) " + s + "\n";
         ((Activity)mContext).runOnUiThread(new Runnable() {
                 @Override
                 public void run() {

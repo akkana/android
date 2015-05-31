@@ -46,6 +46,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.ScrollView;
 
 public class FeedViewer extends Activity implements OnGestureListener {
 
@@ -1113,20 +1114,15 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
             mFeedFetcherText = (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
 
-            String s = "Making a brand new dialog\n\n";
-            for (int i = 0; i < 10; ++i) {
-                s += "\nThis is line " + i;
-                if (i % 5 == 0)
-                    s += " http://asdhjkjkadfshkjdslfshdjfklhsadjfklhdsajfklhsdakfdlhdkjashfkjdshfkjdsahfkjldhsakfj";
-            }
-            mFeedFetcherText.setText(s);
+            mFeedFetcherText.setText("Making a brand new dialog\n\n");
 
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
-                                           new FeedProgress(mFeedFetcherText));
+                                           new FeedProgress(mFeedFetcherText,
+                                                            (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
             if (mFeedFetcher.fetchFeeds())
-                mFeedFetcherText.append("Success");
+                mFeedFetcherText.append("\n\nSuccess running fetchFeeds\n");
             else
-                mFeedFetcherText.append("Failure");
+                mFeedFetcherText.append("\n\nFailure running fetchFeeds\n");
         }
 
         mFeedFetcherDialog.show();
