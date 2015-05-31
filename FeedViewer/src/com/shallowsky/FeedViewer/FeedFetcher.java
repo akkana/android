@@ -122,7 +122,6 @@ public class FeedFetcher {
         } catch(Throwable t) {
             logProgress("Couldn't read saved-urls");
         }
-        logProgress("\nURLRSS URL is " + urlrssURL);
 
         mFetchTask = new FetchFeedsTask();
         mFetchTask.execute(urlrssURL);
@@ -141,54 +140,51 @@ public class FeedFetcher {
     // Within the AsyncTask, we'll just wait for feeds.
     // FeedFetcher can kill the task if it takes way too long.
     // https://developer.android.com/training/basics/network-ops/connecting.html
-    private class FetchFeedsTask extends AsyncTask<String, Void, String> {
+    private class FetchFeedsTask extends AsyncTask<String, String, String> {
+
         @Override
         protected String doInBackground(String... urls) {
             // params comes from the execute() call: params[0] is the url.
-            //String url = mServerUrl + "/feedme/testurlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0Ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0Ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0Ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted";
             String output;
             try {
+                // First, call urlrss to initiate feedme:
                 output = downloadUrl(urls[0]);
-                return output;
+                publishProgress("\nStarted feedme!\n");
+                publishProgress(output);
+
+                // Now, we wait for LOG to appear, periodically checking
+                // what's in the directory.
+                String feeddir = mServerUrl + "/feedme/";
+                int delay = 10000;   // milliseconds
+                for (int i = 0; i < 10; ++i) {
+                    try {
+                        Thread.sleep(delay);
+                        publishProgress("Waking up");
+                    } catch (InterruptedException e) {
+                        // Throwing this error clears the interrupt bit,
+                        // so in case we actually needed to be interrupted:
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                return "Finished with FetchFeedsTask";
+
             } catch (IOException e) {
                 return "Couldn't fetch " + urls[0];
             }
         }
-        // onPostExecute displays the results of the AsyncTask.
-        // contents is the contents of the fetched web page.
-        @Override
-        protected void onPostExecute(String contents) {
-            logProgressOnUIThread("\nFetched initial file!\n");
-            logProgressOnUIThread(contents);
-        }
-    }
 
-    /*
-    // Uses AsyncTask to create a task away from the main UI thread.
-    // This task takes a URL string and uses it to create an
-    // HttpUrlConnection. Once the connection has been established,
-    // the AsyncTask downloads the contents of the webpage as an
-    // InputStream. Finally, the InputStream is converted into a
-    // string, which is displayed in the UI by the AsyncTask's
-    // onPostExecute method.
-    private class DownloadWebpageTask extends AsyncTask<String, Void, String> {
-        @Override
-        protected String doInBackground(String... urls) {
-            // params comes from the execute() call: params[0] is the url.
-            try {
-                return downloadUrl(urls[0]);
-            } catch (IOException e) {
-                return "Unable to retrieve web page. URL may be invalid.";
-            }
+        protected void onProgressUpdate(String... progress) {
+            logProgress(progress[0]);
         }
-        // onPostExecute displays the results of the AsyncTask.
-        // contents is the contents of the fetched web page.
+
+        // onPostExecute displays the return value of the AsyncTask.
         @Override
-        protected void onPostExecute(String contents) {
-            logProgress(contents);
+        protected void onPostExecute(String message) {
+            logProgress("\nDone with FeedFetcher!\n");
+            logProgress(message);
+            //logProgressOnUIThread(message);
         }
     }
-    */
 
     private void logProgress(String s) {
         mFeedProgress.log(s + "\n");
