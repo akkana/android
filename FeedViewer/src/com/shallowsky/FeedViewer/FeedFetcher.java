@@ -61,6 +61,7 @@ public class FeedFetcher {
     Context mContext;
     String mServerUrl;
     FeedProgress mFeedProgress;
+    FetchFeedsTask mFetchTask = null;
 
     public FeedFetcher(Context context, String serverurl, FeedProgress fp) {
         mContext = context;
@@ -75,16 +76,12 @@ public class FeedFetcher {
         mServerUrl = serverurl;
     }
 
-    public void fetchFeeds() {
+    // Fetch feeds. Return true for success or false otherwise.
+    // We're still on the main thread here.
+    public Boolean fetchFeeds() {
         Log.d("FeedFetcher", "Trying to fetch feeds.");
-        fetch(mServerUrl + "/tmp/foo.html");
-    }
 
-    // https://developer.android.com/training/basics/network-ops/connecting.html
-    public void fetch(String url) {
-        Log.d("FeedFetcher", "Trying to fetch " + url);
-
-        // Before attempting to fetch the URL, makes sure the net's up:
+        // Before attempting to fetch anything, makes sure the net's up:
         ConnectivityManager connMgr = (ConnectivityManager) 
             mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
         Log.d("FeedViewer", "Got connectivity service: " + connMgr);
@@ -92,13 +89,50 @@ public class FeedFetcher {
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
 
         // If the net is up, start an async task to fetch the URL:
-        if (networkInfo != null && networkInfo.isConnected()) {
-            new DownloadWebpageTask().execute(url);
-        } else {
+        if (networkInfo == null || !networkInfo.isConnected()) {
             logProgress("No network connection available.");
+            return false;
+        }
+
+        mFetchTask = new FetchFeedsTask();
+        mFetchTask.execute();
+
+        // Now wait for the task to complete.
+        // The UI can still send a signal to us to stop.
+        // XXX
+
+        // If we're finished, the feeds task shouldn't be running any more.
+        mFetchTask = null;
+        return true;
+    }
+
+    // Most of FeedFetcher runs as an AsyncTask,
+    // comuunicating back to the parent thread about its progress.
+    // Within the AsyncTask, we'll just wait for feeds.
+    // FeedFetcher can kill the task if it takes way too long.
+    // https://developer.android.com/training/basics/network-ops/connecting.html
+    private class FetchFeedsTask extends AsyncTask<String, Void, String> {
+        @Override
+        protected String doInBackground(String... urls) {
+            // params comes from the execute() call: params[0] is the url.
+            String url = mServerUrl + "/feedme/testurlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0Ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0Ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0Ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted";
+            String output;
+            try {
+                output = downloadUrl(url);
+                return output;
+            } catch (IOException e) {
+                return "Couldn't fetch " + url;
+            }
+        }
+        // onPostExecute displays the results of the AsyncTask.
+        // contents is the contents of the fetched web page.
+        @Override
+        protected void onPostExecute(String contents) {
+            logProgressOnUIThread(contents);
         }
     }
 
+    /*
     // Uses AsyncTask to create a task away from the main UI thread.
     // This task takes a URL string and uses it to create an
     // HttpUrlConnection. Once the connection has been established,
@@ -123,13 +157,18 @@ public class FeedFetcher {
             logProgress(contents);
         }
     }
+    */
 
     private void logProgress(String s) {
+        mFeedProgress.log(s);
+    }
+
+    private void logProgressOnUIThread(String s) {
         // Should append to the textview in the FeedViewer dialog.
         Log.d("FeedViewer:FeedFetcher", s);
         // The call inside runOnUiThread doesn't see s,
         // but it will see a new final string that's a copy of s:
-        final String ss = s;
+        final String ss = "(subthread) " + s;
         ((Activity)mContext).runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -140,14 +179,14 @@ public class FeedFetcher {
 
     // Given a URL, establishes an HttpUrlConnection and retrieves
     // the web page content as a InputStream, which it returns as
-    // a string.
+    // a string. Synchronous.
     private String downloadUrl(String myurl) throws IOException {
         InputStream is = null;
         // Only display the first 500 characters of the retrieved
         // web page content.
         int len = 500;
 
-        logProgress("Trying to download " + myurl);
+        logProgressOnUIThread("Trying to download " + myurl);
         
         try {
             URL url = new URL(myurl);
@@ -159,7 +198,7 @@ public class FeedFetcher {
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
-            logProgress("Response code: " + response);
+            logProgressOnUIThread("Response code: " + response);
             is = conn.getInputStream();
 
             // Convert the InputStream into a string

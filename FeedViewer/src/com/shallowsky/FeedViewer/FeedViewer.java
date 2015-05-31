@@ -1123,7 +1123,10 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
                                            new FeedProgress(mFeedFetcherText));
-            mFeedFetcher.fetchFeeds();
+            if (mFeedFetcher.fetchFeeds())
+                mFeedFetcherText.append("Success");
+            else
+                mFeedFetcherText.append("Failure");
         }
 
         mFeedFetcherDialog.show();
