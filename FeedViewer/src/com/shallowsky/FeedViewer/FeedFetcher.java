@@ -1,5 +1,39 @@
 package com.shallowsky.FeedViewer;
 
+/**
+ * FeedFetcher: fetch a directory of feeds (already converted from RSS)
+ * from a server.
+ * ServerURL: the base URL of the server.
+ * LocalDir: the place where we'll save the feeds.
+ *
+ * First, we initiate the feed by fetching the special url
+ *   $ServerURL/feedme/urlrss.cgi?xtraurls=STR
+ * where STR is a concatenation of extra URLS wanted,
+ * URL encoded and connected by the string '%0a'.
+ * For instance,
+ *   /feedme/urlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted
+ * The saved URLs come from the (line separated) file
+ * /mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls.
+ *
+ * Once the initial urlrss.cgi URL has been requested,
+ * we wait for it to finish.
+ * baseurl = serverurl + "/feeds/" + strftime("%m-%d-%a")
+ * We wait for baseurl/LOG to appear,
+ * meanwhile showing progress by fetching baseurl and parsing it
+ * to show which directories have appeared.
+ *
+ * Finally, when LOG has appeared, the feeds are ready to download.
+ * Download everything inside baseurl.
+ * This might be tricky because we can't ls the directories inside it
+ * (they have index.html files inside them); we can either fetch each
+ * index.html file, parse it and fetch all the links inside,
+ * or modify urlrss on the server to put a manifest telling us
+ * what to download.
+ *
+ * So far, of course, this class does none of this. It just demonstrates
+ * how to fetch a single test file.
+ */
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.io.Reader;
@@ -19,8 +53,6 @@ import android.net.NetworkInfo;
 import android.content.Context;
 
 import android.util.Log;
-
-//import android.app.AlertDialog;
 
 // https://developer.android.com/training/basics/network-ops/index.html
 
@@ -67,14 +99,14 @@ public class FeedFetcher {
         }
     }
 
-     // Uses AsyncTask to create a task away from the main UI thread.
-     // This task takes a URL string and uses it to create an
-     // HttpUrlConnection. Once the connection has been established,
-     // the AsyncTask downloads the contents of the webpage as an
-     // InputStream. Finally, the InputStream is converted into a
-     // string, which is displayed in the UI by the AsyncTask's
-     // onPostExecute method.
-     private class DownloadWebpageTask extends AsyncTask<String, Void, String> {
+    // Uses AsyncTask to create a task away from the main UI thread.
+    // This task takes a URL string and uses it to create an
+    // HttpUrlConnection. Once the connection has been established,
+    // the AsyncTask downloads the contents of the webpage as an
+    // InputStream. Finally, the InputStream is converted into a
+    // string, which is displayed in the UI by the AsyncTask's
+    // onPostExecute method.
+    private class DownloadWebpageTask extends AsyncTask<String, Void, String> {
         @Override
         protected String doInBackground(String... urls) {
             // params comes from the execute() call: params[0] is the url.
@@ -85,10 +117,11 @@ public class FeedFetcher {
             }
         }
         // onPostExecute displays the results of the AsyncTask.
+        // contents is the contents of the fetched web page.
         @Override
-        protected void onPostExecute(String result) {
-            logProgress(result);
-       }
+        protected void onPostExecute(String contents) {
+            logProgress(contents);
+        }
     }
 
     private void logProgress(String s) {
@@ -98,11 +131,11 @@ public class FeedFetcher {
         // but it will see a new final string that's a copy of s:
         final String ss = s;
         ((Activity)mContext).runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                mFeedProgress.log(ss);
-            }
-        });
+                @Override
+                public void run() {
+                    mFeedProgress.log(ss);
+                }
+            });
     }
 
     // Given a URL, establishes an HttpUrlConnection and retrieves
@@ -126,7 +159,6 @@ public class FeedFetcher {
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
-            Log.d("FeedViewer", "Response code  : " + response);
             logProgress("Response code: " + response);
             is = conn.getInputStream();
 
@@ -145,7 +177,7 @@ public class FeedFetcher {
 
     // Reads an InputStream and converts it to a String.
     public String readIt(InputStream stream, int len)
-                         throws IOException, UnsupportedEncodingException {
+        throws IOException, UnsupportedEncodingException {
         Reader reader = null;
         reader = new InputStreamReader(stream, "UTF-8");        
         char[] buffer = new char[len];
