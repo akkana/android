@@ -57,6 +57,16 @@ import android.content.Context;
 
 import android.util.Log;
 
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import java.text.SimpleDateFormat;
+import android.text.Html;
+
 // https://developer.android.com/training/basics/network-ops/index.html
 
 public class FeedFetcher {
@@ -152,20 +162,45 @@ public class FeedFetcher {
                 publishProgress("\nStarted feedme!\n");
                 publishProgress(output);
 
+                // Figure out our feed directory based on the date:
+                //String feeddir = mServerUrl + "/feeds/05-30-Sat/";
+                Date curDate = new Date();
+                SimpleDateFormat format = new SimpleDateFormat("MM-dd-EEE");
+                String feeddir = mServerUrl + "/feeds/"
+                    + format.format(curDate) + "/";
+
                 // Now, we wait for LOG to appear, periodically checking
                 // what's in the directory.
-                String feeddir = mServerUrl + "/feedme/";
-                int delay = 10000;   // milliseconds
-                for (int i = 0; i < 10; ++i) {
+                int delay = 1000; // 10000;   // milliseconds
+                Boolean feedmeRan = false;
+                for (int i = 0; i < 1; ++i) {
                     try {
                         Thread.sleep(delay);
-                        publishProgress("Waking up");
                     } catch (InterruptedException e) {
                         // Throwing this error clears the interrupt bit,
                         // so in case we actually needed to be interrupted:
                         Thread.currentThread().interrupt();
                     }
+
+                    output = downloadUrl(feeddir);
+                    publishProgress("" + output.length() + " characters");
+                    List<String> subdirs = HTMLDirToList(output);
+                    String subdirStr = "subdirs now:";
+                    for (String subdir : subdirs) {
+                        if (subdir.equals("LOG")) {
+                            publishProgress("feedme finished!");
+                            feedmeRan = true;
+                        }
+                        subdirStr += " " + subdir;
+                    }
+                    publishProgress(subdirStr);
+                    if (feedmeRan)
+                        break;
                 }
+
+                // Now it's time to download!
+                String manifest = downloadUrl(feeddir + "/MANIFEST");
+
                 return "Finished with FetchFeedsTask";
 
             } catch (IOException e) {
@@ -185,6 +220,22 @@ public class FeedFetcher {
             //logProgressOnUIThread(message);
         }
     }
+
+    private List<String> HTMLDirToList(String html) {
+        List<String> subdirs = new ArrayList<String>();
+
+        String linkpat = "<a [^>]+>(.+?)</a>";
+        Matcher matcher = Pattern.compile(linkpat,
+                   Pattern.CASE_INSENSITIVE|Pattern.DOTALL).matcher(html);
+        Boolean started = false;
+        while (matcher.find()) {
+            if (started)
+                subdirs.add(matcher.group(1));
+            if (matcher.group(1).equals("Parent Directory"))
+                started = true;
+        }
+        return subdirs;
+}
 
     private void logProgress(String s) {
         mFeedProgress.log(s + "\n");
@@ -209,10 +260,6 @@ public class FeedFetcher {
     // a string. Synchronous.
     private String downloadUrl(String myurl) throws IOException {
         InputStream is = null;
-        // Only display the first 500 characters of the retrieved
-        // web page content.
-        int len = 500;
-
         logProgressOnUIThread("Trying to download " + myurl);
         
         try {
@@ -229,7 +276,7 @@ public class FeedFetcher {
             is = conn.getInputStream();
 
             // Convert the InputStream into a string
-            String contentAsString = readIt(is, len);
+            String contentAsString = readIt(is);
             return contentAsString;
         
             // Makes sure that the InputStream is closed after the app is
@@ -242,12 +289,17 @@ public class FeedFetcher {
     }
 
     // Reads an InputStream and converts it to a String.
-    public String readIt(InputStream stream, int len)
+    // http://stackoverflow.com/a/5445161
+    public String readIt(InputStream stream)
         throws IOException, UnsupportedEncodingException {
+        java.util.Scanner s = new java.util.Scanner(stream).useDelimiter("\\A");
+        return s.hasNext() ? s.next() : "";
+        /*
         Reader reader = null;
-        reader = new InputStreamReader(stream, "UTF-8");        
+        reader = new InputStreamReader(stream, "UTF-8");
         char[] buffer = new char[len];
         reader.read(buffer);
         return new String(buffer);
+        */
     }
 }
