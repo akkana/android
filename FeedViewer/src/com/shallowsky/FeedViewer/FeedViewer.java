@@ -90,7 +90,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     // Params that can be saved
     int mFontSize = 18;
-    int mBrightness = 10;
+    int mBrightness = 0;
     String mLastUrl = "";
 
     // From nev's helpful webview scroll and sdcard load demo:
@@ -113,7 +113,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mWebSettings = mWebView.getSettings();
         mWebSettings.setJavaScriptEnabled(false);
         mFontSize = mWebSettings.getDefaultFontSize();
-
 
         mWebView.setWebViewClient(new WebViewClient() {
             /**
@@ -248,25 +247,12 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mScreenWidth = metrics.widthPixels;
         mScreenHeight = metrics.heightPixels;
 
-        mWebView.setBackgroundColor(0xff999999);  // can't use black, no way to change fg
+        mWebView.setBackgroundColor(0xff999999);
+            // can't use black, no way to change fg
 
-        readPreferences();
-        setBrightness(mBrightness);
-
-        if (! nullURL(mLastUrl)) {
-            try {
-                //showTextMessage("Remembered " + mLastUrl);
-                mWebView.loadUrl(mLastUrl);
-                mWebSettings.setDefaultFontSize(mFontSize);
-            }
-            catch (Exception e) {
-                mLastUrl = null;
-            }
-        }
-        // If that didn't work, or if no last url, load the feeds list.
-        if (nullURL(mLastUrl)) {
-            loadFeedList();
-        }
+        // Read preferences in onResume instead of here,
+        // and load the page there too.
+        //readPreferences();
     } // end onCreate
 
     // Display a short text message in the doc name area.
@@ -316,13 +302,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
     /**
      * Main entry point to the app.
      *
-     * <p>
-     * This is called after onCreate() or anytime when the system switches back to
-     * your app. Use it to load data, return to saved state and add custom behaviour.
-     * </p>
+     * This is called after onCreate() or anytime when the system
+     * switches back to your app. Use it to load data, return to saved
+     * state and add custom behaviour.
      */
     @Override
     public void onResume() {
+        Log.d("FeedViewer", "onResume");
         super.onResume();
 
         readPreferences();
@@ -340,6 +326,27 @@ public class FeedViewer extends Activity implements OnGestureListener {
         //        + " for " + mLastUrl);
 
         registerMountListener();
+
+        // Now do all the initialization stuff, now that we've read prefs
+        // and have our SD card loaded.
+        setBrightness(mBrightness);
+        Log.d("FeedViewer", "Setting brightness to remembered " + mBrightness);
+
+        if (! onFeedsPage()) {
+            Log.d("FeedViewer", "Not on feeds page; trying to load that url");
+            try {
+                //showTextMessage("Remembered " + mLastUrl);
+                mWebView.loadUrl(mLastUrl);
+                mWebSettings.setDefaultFontSize(mFontSize);
+            }
+            catch (Exception e) {
+                mLastUrl = null;
+            }
+        }
+        // If that didn't work, or if no last url, load the feeds list.
+        if (onFeedsPage()) {
+            loadFeedList();
+        }
     }
 
     /** Check if the SD Card is mounted. */
@@ -385,8 +392,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     /** Saves app state and unregisters mount listeners.
      *
-     * This is basically last point Android system promisses you can do anything.
-     * You can safely ignore other lifecycle methods...
+     * This is basically last point Android system promises you can do anything.
+     * You can safely ignore other lifecycle methods.
      */
     @Override
     public void onPause() {
@@ -397,11 +404,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
         unregisterMountListener();
     }
     private String url_to_scrollpos_key(String url) {
-        if (onFeedsPage())
+        Log.d("FeedViewer", "url = '" + url + "'");
+        Log.d("FeedViewer", "mLastUrl = '" + mLastUrl + "'");
+        if (onFeedsPage() || nullURL(url))
             return "feeds_scrollpos";
+        Log.d("FeedViewer", "Not on feeds page. Is it empty? " + url.isEmpty());
         String urlkey = url;
-        Log.d("FeedViewer", "url = '" + urlkey + "'");
-        if (! urlkey.isEmpty() && urlkey.startsWith("file://")) {
+        if (urlkey.startsWith("file://")) {
             urlkey = urlkey.substring(7);
         }
 
@@ -415,6 +424,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     /** Save app state into SharedPreferences */
     private void saveStateInPreferences(String url) {
+        Log.d("FeedViewer", "************* Saving preferences");
         SharedPreferences.Editor editor = mSharedPreferences.edit();
         String key = url_to_scrollpos_key(url);
         int scrollpos = calculatePagePosition();
@@ -428,10 +438,29 @@ public class FeedViewer extends Activity implements OnGestureListener {
         editor.putString("url", mLastUrl);
 
         editor.commit();
+
+        printPreferences();
+    }
+
+    private void printPreferences() {
+        Log.d("FeedViewer", "==========\nNow complete pref list looks like:");
+        Map<String,?> allprefs = mSharedPreferences.getAll();
+        for (Map.Entry<String,?> entry : allprefs.entrySet())
+            if (entry != null && entry.getKey() != null) {
+                if (entry.getValue() == null)
+                    Log.d("FeedViewer", entry.getKey() + " : null");
+                else
+                    Log.d("FeedViewer", entry.getKey() + " : '"
+                          + entry.getValue() + "'");
+            }
+        Log.d("FeedViewer", "==========");
     }
 
     /* Read all values (except scroll positions for specific pages) from pref */
     private void readPreferences() {
+        Log.d("FeedViewer", "readPreferences");
+        printPreferences();
+
         mFontSize = mSharedPreferences.getInt("font_size", mFontSize);
         mBrightness = mSharedPreferences.getInt("brightness", mBrightness);
         mLastUrl = mSharedPreferences.getString("url", "null");
@@ -469,13 +498,17 @@ public class FeedViewer extends Activity implements OnGestureListener {
     }
 
     Boolean nullURL(String url) {
-        return (url == null || url == "null" || url.length() == 0 || url.equals("about:blank"));
+        return (url == null || url.equals("null") || url.length() == 0
+                || url.isEmpty()|| url.equals("about:blank"));
     }
 
     boolean onFeedsPage() {
         if (nullURL(mLastUrl))
+            //Log.d("FeedViewer", "On feeds page because mLastUrl is null");
             return true;
-        if (mLastUrl.startsWith("file://") && mLastUrl.endsWith("/feeds"))
+        if (mLastUrl.startsWith("file://") &&
+            (mLastUrl.endsWith("/feeds") ||
+             mLastUrl.endsWith("com.shallowsky.FeedMe")))
             return true;
         return false;
     }
@@ -608,15 +641,17 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                 resultspage += "<div class=\"index\"><a href='" + indexfile.toURI()
                                         + "'>" + daydirs[day].getName() + " "
                                         + feeds[feed].getName() + "</a></div>\n";
-                                // mMainBasePath will be the first of mBasePaths
-                                // that actually has files in it.
+                                // mMainBasePath will be the first of
+                                // mBasePaths that actually has files in it.
                                 if (mMainBasePath == null)
                                     mMainBasePath = basedir.getPath();
                             }
                             else {
-                                // If we erroneously don't get an index.html file,
-                                // we'll end up showing the directory but giving
-                                // no way to read or delete it. So show something:
+                                // If we erroneously don't get an
+                                // index.html file, we'll end up
+                                // showing the directory but giving no
+                                // way to read or delete it. So show
+                                // something:
                                 resultspage += daydirs[day].getName() + " "
                                     + feeds[feed].getName() + "</a> (no index!)<br>\n";
                             }
@@ -634,7 +669,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         // Keep the font size the way the user asked:
         mWebSettings.setDefaultFontSize(mFontSize);
         updateBatteryLevel();
-        mLastUrl = null;   // don't count on this -- may get overridden. Use onFeedsPage().
+        mLastUrl = null;
+           // don't count on this null -- may get overridden. Use onFeedsPage().
 
         //saveSettings();
     }
@@ -1014,6 +1050,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 Log.d("FeedViewer", "bright " + b + " (y = " + y
                       + "/" + mScreenHeight + ")");
                 setBrightness(b);
+                mBrightness = b;
             }
             return true;
         }
@@ -1044,6 +1081,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
     */
 
     public void setBrightness(int value) {
+        // If mBrightness is 0, brightness probably hasn't been read
+        // from preferences yet.
+        if (mBrightness <= 0)
+            return;
+
         LayoutParams lp = getWindow().getAttributes();
         lp.screenBrightness = (float) value / 100;
         //lp.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
