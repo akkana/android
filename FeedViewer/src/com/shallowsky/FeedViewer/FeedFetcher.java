@@ -37,7 +37,9 @@ package com.shallowsky.FeedViewer;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.io.Reader;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
@@ -73,12 +75,15 @@ public class FeedFetcher {
 
     Context mContext;
     String mServerUrl;
+    String mLocalDir;
     FeedProgress mFeedProgress;
     FetchFeedsTask mFetchTask = null;
 
-    public FeedFetcher(Context context, String serverurl, FeedProgress fp) {
+    public FeedFetcher(Context context, String serverurl, String localdir,
+                       FeedProgress fp) {
         mContext = context;
         mServerUrl = serverurl;
+        mLocalDir = localdir;
         mFeedProgress = fp;
 
         Log.d("FeedFetcher", "\nStarting FeedFetcher; logging progress");
@@ -108,6 +113,7 @@ public class FeedFetcher {
         }
 
         String urlrssURL = mServerUrl + "/feedme/testurlrss.cgi";
+        //String urlrssURL = mServerUrl + "/feedme/urlrss.cgi";
         Boolean haveURLs = false;
 
         // Read any saved URLs we need to pass to urlrss.
@@ -173,7 +179,7 @@ public class FeedFetcher {
                 // what's in the directory.
                 int delay = 1000; // 10000;   // milliseconds
                 Boolean feedmeRan = false;
-                for (int i = 0; i < 1; ++i) {
+                for (int i = 0; i < 5; ++i) {   // This should be while true
                     try {
                         Thread.sleep(delay);
                     } catch (InterruptedException e) {
@@ -200,6 +206,25 @@ public class FeedFetcher {
 
                 // Now it's time to download!
                 String manifest = downloadUrl(feeddir + "/MANIFEST");
+                if (manifest.length() > 0) {
+                    String[] filenames = manifest.split("\n+");
+                    for (String f : filenames) {
+                        String furl = feeddir + "/" + f;
+                        String filepath = mLocalDir + "/" + f;
+                        //publishProgress(f);
+                        publishProgress("Saving " + furl);
+                        publishProgress("  to " + filepath);
+                        File fstat = new File(filepath);
+                        if (! fstat.exists()) {
+                            output = downloadUrl(furl);
+                            FileOutputStream fos =
+                                new FileOutputStream(new File(filepath),
+                                                     false);
+                            fos.write(output.getBytes());
+                            fos.close();
+                        }
+                    }
+                }
 
                 return "Finished with FetchFeedsTask";
 

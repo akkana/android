@@ -62,6 +62,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
     Button mBiggerButton;
     TextView mDocNameView;
     TextView mBatteryLevel;
+    // XXX This needs to be revisited, obviously,
+    // to allow the option of non external SD card too.
+    String mWritableDir = "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer";
 
     // /sdcard and getExternalStorageDirectory() aren't actually the SD card;
     // the sdcard is /sdcard/sdcard or /mnt/sdcard/external_storage,
@@ -72,7 +75,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
     String[] mBasePaths = {
         mStorage + File.separator + "sdcard" + File.separator + "feeds",
         mStorage + File.separator + "external_sd" + File.separator + "feeds",
-        "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer",
+        mWritableDir,
         mStorage + File.separator + "feeds",
     };
 
@@ -1117,6 +1120,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
             mFeedFetcherText.setText("Making a brand new dialog\n\n");
 
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
+                                           mWritableDir,
                                            new FeedProgress(mFeedFetcherText,
                                                             (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
             if (mFeedFetcher.fetchFeeds())
