@@ -234,9 +234,6 @@ public class FeedFetcher {
                     publishProgress("  to " + filepath);
                     File fstat = new File(filepath);
                     if (! fstat.exists()) {
-                        curURL = furl;
-                        output = downloadUrl(furl);
-
                         // Create the parent directories, if need be.
                         File dirfile = fstat.getParentFile();
                         if (!dirfile.exists()) {
@@ -248,9 +245,11 @@ public class FeedFetcher {
                                 continue;
                             }
                         }
+
                         try {
                             FileOutputStream fos = new FileOutputStream(fstat);
-                            fos.write(output.getBytes());
+                            curURL = furl;
+                            downloadUrlToFile(furl, fos);
                             fos.close();
                         } catch (FileNotFoundException e) {
                             publishProgress("Skipping " + filepath
@@ -324,12 +323,13 @@ public class FeedFetcher {
     // Given a URL, establishes an HttpUrlConnection and retrieves
     // the web page content as a InputStream, which it returns as
     // a string. Synchronous.
-    private String downloadUrl(String myurl) throws IOException {
+    // Don't use this for non-string content, like files with image data.
+    private String downloadUrl(String urlstr) throws IOException {
+        Log.d("FeedFetcher", "downloadUrl " + urlstr);
         InputStream is = null;
-        Log.d("FeedFetcher", "downloadUrl " + myurl);
         
         try {
-            URL url = new URL(myurl);
+            URL url = new URL(urlstr);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
             conn.setReadTimeout(10000    /* milliseconds */);
             conn.setConnectTimeout(15000 /* milliseconds */);
@@ -359,18 +359,55 @@ public class FeedFetcher {
         }
     }
 
+    // Given a URL, establishes an HttpUrlConnection and retrieves
+    // the web page content as a byte stream, then writes it to a file.
+    // Ick: this has a lot of duplicated code from the previous function.
+    private void downloadUrlToFile(String urlstr, FileOutputStream fos)
+        throws IOException {
+
+        Log.d("FeedFetcher", "downloadUrlToFile " + urlstr);
+        InputStream is = null;
+
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+        
+        try {
+            URL url = new URL(urlstr);
+            HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            conn.setReadTimeout(10000    /* milliseconds */);
+            conn.setConnectTimeout(15000 /* milliseconds */);
+            conn.setRequestMethod("GET");
+            conn.setDoInput(true);
+            Log.d("FeedFetcher", "Starting query");
+            // Starts the query
+            conn.connect();
+            int response = conn.getResponseCode();
+            Log.d("FeedFetcher", "Response code: " + response);
+            if (response != 200)
+                logProgressOnUIThread("Response code: " + response);
+            is = conn.getInputStream();
+            Log.d("FeedFetcher", "Got input stream");
+
+            // we need to know how may bytes were read
+            // to write them to the output stream
+            int len = 0;
+            while ((len = is.read(buffer)) != -1)
+                fos.write(buffer, 0, len);
+        
+            // Makes sure that the InputStream is closed after the app is
+            // finished using it.
+        } finally {
+            if (is != null) {
+                is.close();
+            }
+        }
+    }
+
     // Reads an InputStream and converts it to a String.
     // http://stackoverflow.com/a/5445161
     public String readIt(InputStream stream)
         throws IOException, UnsupportedEncodingException {
         java.util.Scanner s = new java.util.Scanner(stream).useDelimiter("\\A");
         return s.hasNext() ? s.next() : "";
-        /*
-        Reader reader = null;
-        reader = new InputStreamReader(stream, "UTF-8");
-        char[] buffer = new char[len];
-        reader.read(buffer);
-        return new String(buffer);
-        */
     }
 }
