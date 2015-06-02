@@ -92,6 +92,12 @@ public class FeedFetcher {
         mServerUrl = serverurl;
     }
 
+    public void stop() {
+        if (mFetchTask == null)
+            return;
+        mFetchTask.cancel(true);
+    }
+
     // Fetch feeds. Return true for success or false otherwise.
     // We're still on the main thread here.
     public Boolean fetchFeeds() {
@@ -157,8 +163,6 @@ public class FeedFetcher {
         @Override
         protected String doInBackground(String... urls) {
             // params comes from the execute() call: params[0] is the url.
-            String curURL = ""; // Used for reporting download errors in catch.
-
             String output;
             String filepath = null;
 
@@ -181,109 +185,120 @@ public class FeedFetcher {
                 publishProgress("No MANIFEST there yet\n");
             }
 
-            try {
-                if (manifest == null) {
-                    // First, call urlrss to initiate feedme:
-                    curURL = urls[0];
+            if (manifest == null) {
+                // First, call urlrss to initiate feedme:
+                try {
                     output = downloadUrl(urls[0]);
                     publishProgress("\nStarting feedme ...\n");
                     publishProgress(output);
+                } catch (IOException e) {
+                    return "Couldn't initiate feedme: IOException";
+                }
 
-                    // Now, we wait for MANIFEST to appear,
-                    // periodically checking what's in the directory.
-                    int delay = 5000;   // polling interval, milliseconds
-                    Boolean feedmeRan = false;
-                    while (true) {
-                        try {
-                            Thread.sleep(delay);
-                        } catch (InterruptedException e) {
-                            // Throwing this error clears the interrupt bit,
-                            // so in case we actually needed to be interrupted:
-                            Thread.currentThread().interrupt();
-                        }
-
-                        curURL = feeddir;
-                        output = downloadUrl(feeddir);
-                        List<String> subdirs = HTMLDirToList(output);
-                        String subdirStr = "subdirs now:";
-                        for (String subdir : subdirs) {
-                            if (subdir.startsWith("MANIFEST")) {
-                                publishProgress("feedme finished!");
-                                feedmeRan = true;
-                            }
-                            subdirStr += " " + subdir;
-                        }
-                        publishProgress(subdirStr);
-                        if (feedmeRan)
-                            break;
+                // Now, we wait for MANIFEST to appear,
+                // periodically checking what's in the directory.
+                int delay = 5000;   // polling interval, milliseconds
+                Boolean feedmeRan = false;
+                while (true) {
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        // Thread.sleep() requires that we catch this.
+                        // But throwing this error clears the interrupt bit,
+                        // so in case we actually needed to be interrupted:
+                        Thread.currentThread().interrupt();
                     }
 
-                    // Now it's time to download!
-                    curURL = manifestURL;
-                    manifest = downloadUrl(manifestURL);
-                }
-                Log.d("FeedFetcher", "Fetched manifest");
+                    // AsyncTask has to check itself for cancellation:
+                    if (isCancelled())
+                        break;
 
-                if (manifest.length() == 0) {
-                    Log.d("FeedFetcher", "MANIFEST was zero length!");
-                    return "MANIFEST was zero length!";
-                }
-
-                Log.d("FeedFetcher", "\n=======================\nDownloading");
-                String datedir = mLocalDir + "/" + todayStr + "/";
-                File dd = new File(datedir);
-                dd.mkdir();
-                String[] filenames = manifest.split("\n+");
-                for (String f : filenames) {
-                    // Skip directories; we'll make them later with mkdirs.
-                    if (f.endsWith("/")) {
-                        Log.d("FeedDetcher", f + " is a directory, skipping");
+                    // Now check what directories are there so far:
+                    try {
+                        output = downloadUrl(feeddir);
+                    } catch (IOException e) {
+                        publishProgress("Couldn't read directories: IOException");
                         continue;
                     }
-                    String furl = feeddir + f;
-                    filepath = datedir + f;
-                    publishProgress("Saving " + furl);
-                    publishProgress("  to " + filepath);
-                    File fstat = new File(filepath);
-                    if (! fstat.exists()) {
-                        // Create the parent directories, if need be.
-                        File dirfile = fstat.getParentFile();
-                        Log.d("FeedDetcher", "dirfile is " + dirfile);
-                        if (!dirfile.exists()) {
-                            Log.d("FeedDetcher", "mkdirs " + dirfile);
-                            dirfile.mkdirs();
-                            if (!dirfile.exists()) {
-                                publishProgress("Skipping " + filepath
-                                                + ", can't make directory "
-                                                + dirfile.getPath());
-                                continue;
-                            }
+                    List<String> subdirs = HTMLDirToList(output);
+                    String subdirStr = "subdirs now:";
+                    for (String subdir : subdirs) {
+                        if (subdir.startsWith("MANIFEST")) {
+                            publishProgress("feedme finished!");
+                            feedmeRan = true;
                         }
-
-                        try {
-                            FileOutputStream fos = new FileOutputStream(fstat);
-                            curURL = furl;
-                            downloadUrlToFile(furl, fos);
-                            fos.close();
-                        } catch (FileNotFoundException e) {
-                            publishProgress("Skipping " + filepath
-                                            + ":  FileNotFoundException: "
-                                            + fstat);
-                            continue;
-                        }
+                        subdirStr += " " + subdir;
                     }
-                    else
-                        publishProgress(filepath + " is already here");
+                    publishProgress(subdirStr);
+
+                    if (feedmeRan) {
+                        // Feedme ran: get the manifest!
+                        try {
+                            manifest = downloadUrl(manifestURL);
+                        } catch (IOException e) {
+                            return "Couldn't read directories: IOException";
+                        }
+                        break;
+                    }
+                }
+            }
+            Log.d("FeedFetcher", "Fetched manifest");
+
+            if (manifest.length() == 0) {
+                Log.d("FeedFetcher", "MANIFEST was zero length!");
+                return "MANIFEST was zero length!";
+            }
+
+            Log.d("FeedFetcher", "\n=======================\nDownloading");
+            String datedir = mLocalDir + "/" + todayStr + "/";
+            File dd = new File(datedir);
+            dd.mkdir();
+            String[] filenames = manifest.split("\n+");
+            for (String f : filenames) {
+                // Skip directories; we'll make them later with mkdirs.
+                if (f.endsWith("/")) {
+                    Log.d("FeedDetcher", f + " is a directory, skipping");
+                    continue;
+                }
+                String furl = feeddir + f;
+                filepath = datedir + f;
+                publishProgress("Saving " + furl);
+                publishProgress("  to " + filepath);
+                File fstat = new File(filepath);
+                if (fstat.exists()) {
+                    publishProgress(filepath + " is already here");
+                    continue;
                 }
 
-                return "Finished with FeedFetcher";
-            } catch (IOException e) {
-                String err = "IOException: Couldn't fetch " + curURL;
-                if (filepath != null)
-                    err += " to " + filepath;
-                Log.d("FeedFetcher", err);
-                return err + "\nAborting FeedFetcher";
+                // Create the parent directories, if need be.
+                File dirfile = fstat.getParentFile();
+                Log.d("FeedDetcher", "dirfile is " + dirfile);
+                if (!dirfile.exists()) {
+                    Log.d("FeedDetcher", "mkdirs " + dirfile);
+                    dirfile.mkdirs();
+                    if (!dirfile.exists()) {
+                        publishProgress("Skipping " + filepath
+                                        + ", can't make directory "
+                                        + dirfile.getPath());
+                        continue;
+                    }
+                }
+
+                try {
+                    FileOutputStream fos = new FileOutputStream(fstat);
+                    downloadUrlToFile(furl, fos);
+                    fos.close();
+                } catch (FileNotFoundException e) {
+                    publishProgress("Skipping " + filepath
+                                    + ":  FileNotFoundException: "
+                                    + fstat);
+                    continue;
+                } catch (IOException e) {
+                    return "Couldn't download " + furl + ": IOException";
+                }
             }
+
+            return "Finished with FeedFetcher";
         }
 
         protected void onProgressUpdate(String... progress) {
