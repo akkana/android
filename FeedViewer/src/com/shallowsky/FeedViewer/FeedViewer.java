@@ -1165,10 +1165,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                            mWritableDir,
                                            new FeedProgress(mFeedFetcherText,
                                                             (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
-            if (mFeedFetcher.fetchFeeds())
-                mFeedFetcherText.append("\n\nSuccess running fetchFeeds\n");
-            else
-                mFeedFetcherText.append("\n\nFailure running fetchFeeds\n");
+            if (! mFeedFetcher.fetchFeeds())
+                mFeedFetcherText.append("\n\nCouldn't run fetchFeeds\n");
         }
 
         mFeedFetcherDialog.show();

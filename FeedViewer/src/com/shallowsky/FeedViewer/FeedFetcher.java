@@ -86,9 +86,6 @@ public class FeedFetcher {
         mServerUrl = serverurl;
         mLocalDir = localdir;
         mFeedProgress = fp;
-
-        Log.d("FeedFetcher", "\nStarting FeedFetcher; logging progress");
-        logProgress("Starting FeedFetcher");
     }
 
     public void setServerURL(String serverurl) {
@@ -103,7 +100,6 @@ public class FeedFetcher {
         // Before attempting to fetch anything, makes sure the net's up:
         ConnectivityManager connMgr = (ConnectivityManager) 
             mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-        Log.d("FeedFetcher", "Got connectivity service: " + connMgr);
         // Next line crashes. Why?
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
 
@@ -161,57 +157,71 @@ public class FeedFetcher {
         @Override
         protected String doInBackground(String... urls) {
             // params comes from the execute() call: params[0] is the url.
+            String curURL = ""; // Used for reporting download errors in catch.
+
             String output;
-            String curURL = urls[0];
             String filepath = null;
+
+            // Figure out our feed directory based on the date:
+            Date curDate = new Date();
+            SimpleDateFormat format = new SimpleDateFormat("MM-dd-EEE");
+            String todayStr = format.format(curDate);
+            String feeddir = mServerUrl + "/feeds/"
+                + todayStr + "/";
+            String manifestURL = feeddir + "MANIFEST";
+            String manifest;
+
+            // Has feedme already run? Check whether the manifest
+            // is already there.
             try {
-                // First, call urlrss to initiate feedme:
-                output = downloadUrl(curURL);
-                publishProgress("\nStarted feedme!\n");
-                publishProgress(output);
+                manifest = downloadUrl(manifestURL);
+                publishProgress("Feedme already ran.\n");
+            } catch (IOException e) {
+                manifest = null;
+                publishProgress("No MANIFEST there yet\n");
+            }
 
-                // Figure out our feed directory based on the date:
-                //String feeddir = mServerUrl + "/feeds/05-30-Sat/";
-                Date curDate = new Date();
-                SimpleDateFormat format = new SimpleDateFormat("MM-dd-EEE");
-                String todayStr = format.format(curDate);
-                String feeddir = mServerUrl + "/feeds/"
-                    + todayStr + "/";
+            try {
+                if (manifest == null) {
+                    // First, call urlrss to initiate feedme:
+                    curURL = urls[0];
+                    output = downloadUrl(urls[0]);
+                    publishProgress("\nStarting feedme ...\n");
+                    publishProgress(output);
 
-                // Now, we wait for LOG to appear, periodically checking
-                // what's in the directory.
-                int delay = 1000; // 10000;   // milliseconds
-                Boolean feedmeRan = false;
-                //for (int i = 0; i < 5; ++i) {   // This should be while true
-                while (true) {
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        // Throwing this error clears the interrupt bit,
-                        // so in case we actually needed to be interrupted:
-                        Thread.currentThread().interrupt();
-                    }
-
-                    curURL = feeddir;
-                    output = downloadUrl(feeddir);
-                    List<String> subdirs = HTMLDirToList(output);
-                    String subdirStr = "subdirs now:";
-                    for (String subdir : subdirs) {
-                        if (subdir.startsWith("MANIFEST")) {
-                            publishProgress("feedme finished!");
-                            feedmeRan = true;
+                    // Now, we wait for MANIFEST to appear,
+                    // periodically checking what's in the directory.
+                    int delay = 5000;   // polling interval, milliseconds
+                    Boolean feedmeRan = false;
+                    while (true) {
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException e) {
+                            // Throwing this error clears the interrupt bit,
+                            // so in case we actually needed to be interrupted:
+                            Thread.currentThread().interrupt();
                         }
-                        subdirStr += " " + subdir;
-                    }
-                    publishProgress(subdirStr);
-                    if (feedmeRan)
-                        break;
-                }
 
-                // Now it's time to download!
-                curURL = feeddir + "MANIFEST";
-                output = downloadUrl(curURL);
-                String manifest = downloadUrl(curURL);
+                        curURL = feeddir;
+                        output = downloadUrl(feeddir);
+                        List<String> subdirs = HTMLDirToList(output);
+                        String subdirStr = "subdirs now:";
+                        for (String subdir : subdirs) {
+                            if (subdir.startsWith("MANIFEST")) {
+                                publishProgress("feedme finished!");
+                                feedmeRan = true;
+                            }
+                            subdirStr += " " + subdir;
+                        }
+                        publishProgress(subdirStr);
+                        if (feedmeRan)
+                            break;
+                    }
+
+                    // Now it's time to download!
+                    curURL = manifestURL;
+                    manifest = downloadUrl(manifestURL);
+                }
                 Log.d("FeedFetcher", "Fetched manifest");
 
                 if (manifest.length() == 0) {
@@ -226,8 +236,10 @@ public class FeedFetcher {
                 String[] filenames = manifest.split("\n+");
                 for (String f : filenames) {
                     // Skip directories; we'll make them later with mkdirs.
-                    if (f.endsWith("/"))
+                    if (f.endsWith("/")) {
+                        Log.d("FeedDetcher", f + " is a directory, skipping");
                         continue;
+                    }
                     String furl = feeddir + f;
                     filepath = datedir + f;
                     publishProgress("Saving " + furl);
@@ -236,7 +248,9 @@ public class FeedFetcher {
                     if (! fstat.exists()) {
                         // Create the parent directories, if need be.
                         File dirfile = fstat.getParentFile();
+                        Log.d("FeedDetcher", "dirfile is " + dirfile);
                         if (!dirfile.exists()) {
+                            Log.d("FeedDetcher", "mkdirs " + dirfile);
                             dirfile.mkdirs();
                             if (!dirfile.exists()) {
                                 publishProgress("Skipping " + filepath
@@ -253,7 +267,7 @@ public class FeedFetcher {
                             fos.close();
                         } catch (FileNotFoundException e) {
                             publishProgress("Skipping " + filepath
-                                            + ",  FileNotFoundException: "
+                                            + ":  FileNotFoundException: "
                                             + fstat);
                             continue;
                         }
@@ -335,19 +349,17 @@ public class FeedFetcher {
             conn.setConnectTimeout(15000 /* milliseconds */);
             conn.setRequestMethod("GET");
             conn.setDoInput(true);
-            Log.d("FeedFetcher", "Starting query");
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
-            Log.d("FeedFetcher", "Response code: " + response);
             if (response != 200)
                 logProgressOnUIThread("Response code: " + response);
+            else
+                Log.d("FeedFetcher", "Response code: " + response);
             is = conn.getInputStream();
-            Log.d("FeedFetcher", "Got input stream");
 
             // Convert the InputStream into a string
             String contentAsString = readIt(is);
-            Log.d("FeedFetcher", "Read it; returning content");
             return contentAsString;
         
             // Makes sure that the InputStream is closed after the app is
@@ -374,11 +386,10 @@ public class FeedFetcher {
         try {
             URL url = new URL(urlstr);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-            conn.setReadTimeout(10000    /* milliseconds */);
-            conn.setConnectTimeout(15000 /* milliseconds */);
+            conn.setReadTimeout(10000);      /* milliseconds */
+            conn.setConnectTimeout(15000);   /* milliseconds */
             conn.setRequestMethod("GET");
             conn.setDoInput(true);
-            Log.d("FeedFetcher", "Starting query");
             // Starts the query
             conn.connect();
             int response = conn.getResponseCode();
