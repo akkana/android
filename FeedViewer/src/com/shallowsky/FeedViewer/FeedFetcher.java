@@ -79,6 +79,7 @@ public class FeedFetcher {
     String mLocalDir;
     FeedProgress mFeedProgress;
     FetchFeedsTask mFetchTask = null;
+    Boolean mFetchImages = true;
 
     public FeedFetcher(Context context, String serverurl, String localdir,
                        FeedProgress fp) {
@@ -96,6 +97,17 @@ public class FeedFetcher {
         if (mFetchTask == null)
             return;
         mFetchTask.cancel(true);
+        mFetchTask = null;
+    }
+
+    // Control whether images are fetched
+    public Boolean toggleImages() {
+        mFetchImages = !mFetchImages;
+        if (mFetchImages)
+            logProgress("Will include images.");
+        else
+            logProgress("NOT including images.");
+        return mFetchImages;
     }
 
     // Fetch feeds. Return true for success or false otherwise.
@@ -260,6 +272,14 @@ public class FeedFetcher {
                     Log.d("FeedDetcher", f + " is a directory, skipping");
                     continue;
                 }
+                if (!mFetchImages) {
+                    String fl = f.toLowerCase();
+                    if (fl.endsWith(".jpg") || fl.endsWith("jpeg")
+                        || fl.endsWith(".png") || fl.endsWith("gif")) {
+                        Log.d("FeedDetcher", "Skipping image " + f);
+                        continue;
+                    }
+                }
                 String furl = feeddir + f;
                 filepath = datedir + f;
                 publishProgress("Saving " + furl);
@@ -330,7 +350,7 @@ public class FeedFetcher {
         return subdirs;
 }
 
-    private void logProgress(String s) {
+    public void logProgress(String s) {
         mFeedProgress.log(s + "\n");
         Log.d("FeedFetcher", s);
     }

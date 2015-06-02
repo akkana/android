@@ -1123,17 +1123,25 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     // Callbacks for buttons in the FeedFetcher dialog:
 
-    private void toggleFeedFetcherImages() {
+    private void toggleFeedFetcherImages(View v) {
+        Boolean fetch = mFeedFetcher.toggleImages();
+        // Set the text of the button to indicate what's being fetched
+        if (fetch)
+            ((Button)v).setText("No images");
+        else
+            ((Button)v).setText("Images");
     }
 
     private void stopFeeds() {
+        mFeedFetcher.stop();
+        mFeedFetcher = null;
+        mFeedFetcherDialog.dismiss();
     }
 
     private void showFeedFetcherProgress() {
 
         // Pop up a dialog with a textview that we can modify later:
-        if (mFeedFetcherDialog != null && mFeedFetcher != null) {
-            //mFeedFetcherDialog.ShowDialog();
+        if (mFeedFetcherDialog != null) {
             mFeedFetcherText.append("\n\nRe-showing the old dialog\n");
         }
         else {
@@ -1141,28 +1149,32 @@ public class FeedViewer extends Activity implements OnGestureListener {
             mFeedFetcherDialog.setTitle("Feed fetcher progress");
             mFeedFetcherDialog.setContentView(R.layout.feedfetcher);
 
-            mFeedFetcherText = (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
+            mFeedFetcherText =
+                (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
 
 
-            /*
             // Can't do these yet: the dialog hasn't been created yet.
-            Button imgToggle = (Button)mFeedFetcherDialog.findViewById(R.id.ffImgToggle);
+            Button imgToggle =
+                (Button)mFeedFetcherDialog.findViewById(R.id.ffImgToggle);
             imgToggle.setOnClickListener(new OnClickListener() {
                     public void onClick(View v) {
-                        toggleFeedFetcherImages();
+                        toggleFeedFetcherImages(v);
                     }
                 });
 
-            Button stopBtn = (Button)mFeedFetcherDialog.findViewById(R.id.ffStopBtn);
+            Button stopBtn =
+                (Button)mFeedFetcherDialog.findViewById(R.id.ffStopBtn);
             stopBtn.setOnClickListener(new OnClickListener() {
                     public void onClick(View v) {
                         stopFeeds();
                     }
                 });
-            */
 
             mFeedFetcherText.setText("Making a brand new dialog\n\n");
+        }
 
+        if (mFeedFetcher == null) {
+            mFeedFetcherText.append("Creating a new Feed Fetcher\n");
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
                                            mWritableDir,
                                            new FeedProgress(mFeedFetcherText,
