@@ -80,6 +80,7 @@ public class FeedFetcher {
     FeedProgress mFeedProgress;
     FetchFeedsTask mFetchTask = null;
     Boolean mFetchImages = true;
+    String mSavedURLs;
 
     public FeedFetcher(Context context, String serverurl, String localdir,
                        FeedProgress fp) {
@@ -127,17 +128,18 @@ public class FeedFetcher {
             return false;
         }
 
-        //String urlrssURL = mServerUrl + "/feedme/testurlrss.cgi";
         String urlrssURL = mServerUrl + "/feedme/urlrss.cgi";
         Boolean haveURLs = false;
 
         // Read any saved URLs we need to pass to urlrss.
-        // Of course this should be relative to wherever we're reading feeds,
-        // or have several options of path. Eventually.
-        String feedfile = "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls";
+        // XXX Of course this should be relative to wherever we're
+        // reading feeds, or have several options of path. Eventually.
+        mSavedURLs =
+            "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls";
         try {
-            InputStream fis = new FileInputStream(feedfile);
-            InputStreamReader isr = new InputStreamReader(fis);
+            InputStream fis = new FileInputStream(mSavedURLs);
+            InputStreamReader isr = null;
+            isr = new InputStreamReader(fis);
             BufferedReader br = new BufferedReader(isr);
             String line;
             while ((line = br.readLine()) != null) {
@@ -149,8 +151,17 @@ public class FeedFetcher {
                 }
                 urlrssURL += URLEncoder.encode(line, "UTF-8");
             }
+            isr.close();
+            // Closing the reader closes the stream as well.
+            // Doing it in finally {} is a lot more elaborate because
+            // InputStreamReader.close() throws IOException so you have
+            // to add another try inside the finally. <eyeroll>
+            // Nobody seems to want to bother with this in code samples
+            // I've found online, and neither do I.
         } catch(Throwable t) {
-            logProgress("Couldn't read saved-urls");
+            logProgress("Couldn't read any saved urls");
+            // Zero out the filename so we won't later try to delete it.
+            mSavedURLs = null;
         }
 
         mFetchTask = new FetchFeedsTask();
@@ -229,7 +240,7 @@ public class FeedFetcher {
                     try {
                         output = downloadUrl(feeddir);
                     } catch (IOException e) {
-                        publishProgress("Couldn't read directories: IOException");
+                        publishProgress("Couldn't read dirs: IOException");
                         continue;
                     }
                     List<String> subdirs = HTMLDirToList(output);
@@ -248,7 +259,16 @@ public class FeedFetcher {
                         try {
                             manifest = downloadUrl(manifestURL);
                         } catch (IOException e) {
-                            return "Couldn't read directories: IOException";
+                            return "Couldn't read MANIFEST: IOException";
+                        }
+
+                        // Delete the local saved-urls file, if any.
+                        if (mSavedURLs != null) {
+                            File savefile = new File(mSavedURLs);
+                            if (savefile.exists()) {
+                                savefile.delete();
+                                publishProgress("Deleted " + mSavedURLs);
+                            }
                         }
                         break;
                     }
