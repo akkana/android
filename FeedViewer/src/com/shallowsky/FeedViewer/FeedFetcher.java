@@ -63,9 +63,11 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Scanner;
+import java.util.Set;
+import java.util.TreeSet;
 
 import java.text.SimpleDateFormat;
 import android.text.Html;
@@ -95,9 +97,19 @@ public class FeedFetcher {
     }
 
     public void stop() {
-        if (mFetchTask == null)
+        logProgress("Stopping FeedFetcher");
+        if (mFetchTask == null) {
+            // For some reason, we get into this clause
+            // even when the task is still running.
+            logProgress("Already stopped");
             return;
+        }
+        logProgress("Cancelling");
         mFetchTask.cancel(true);
+        // This might be too early to set mFetchTask to null:
+        // I'm hoping it doesn't get garbage collected and
+        // cleans up after itself, since I don't know how to
+        // find out when it finishes.
         mFetchTask = null;
     }
 
@@ -128,7 +140,10 @@ public class FeedFetcher {
             return false;
         }
 
-        String urlrssURL = mServerUrl + "/feedme/urlrss.cgi";
+        // We must pass xtraurls= in the URL even if we have no extras,
+        // because that's what urlrss.cgi uses to decide if it's
+        // being called as a CGI script.
+        String urlrssURL = mServerUrl + "/feedme/urlrss.cgi?xtraurls=";
         Boolean haveURLs = false;
 
         // Read any saved URLs we need to pass to urlrss.
@@ -146,10 +161,10 @@ public class FeedFetcher {
                 if (haveURLs)
                     urlrssURL += "%0A";
                 else {
-                    urlrssURL += "?xtraurls=";
                     haveURLs = true;
                 }
                 urlrssURL += URLEncoder.encode(line, "UTF-8");
+                logProgress("URL: " + line);
             }
             isr.close();
             // Closing the reader closes the stream as well.
@@ -162,6 +177,7 @@ public class FeedFetcher {
             logProgress("Couldn't read any saved urls");
             // Zero out the filename so we won't later try to delete it.
             mSavedURLs = null;
+            urlrssURL += "none";
         }
 
         mFetchTask = new FetchFeedsTask();
@@ -211,17 +227,20 @@ public class FeedFetcher {
             if (manifest == null) {
                 // First, call urlrss to initiate feedme:
                 try {
+                    publishProgress(urls[0]);
                     output = downloadUrl(urls[0]);
                     publishProgress("\nStarting feedme ...\n");
                     publishProgress(output);
                 } catch (IOException e) {
-                    return "Couldn't initiate feedme: IOException";
+                    return "Couldn't initiate feedme: IOException on "
+                        + urls[0];
                 }
 
                 // Now, we wait for MANIFEST to appear,
                 // periodically checking what's in the directory.
                 int delay = 5000;   // polling interval, milliseconds
                 Boolean feedmeRan = false;
+                Set<String> subdirSet = new TreeSet<String>();
                 while (true) {
                     try {
                         Thread.sleep(delay);
@@ -232,9 +251,13 @@ public class FeedFetcher {
                         Thread.currentThread().interrupt();
                     }
 
-                    // AsyncTask has to check itself for cancellation:
-                    if (isCancelled())
+                    // AsyncTask has to check itself for cancellation.
+                    // But this doesn't work: even after calling cancel
+                    // it runs forever.
+                    if (isCancelled()) {
+                        publishProgress("Task was cancelled");
                         break;
+                    }
 
                     // Now check what directories are there so far:
                     try {
@@ -244,15 +267,16 @@ public class FeedFetcher {
                         continue;
                     }
                     List<String> subdirs = HTMLDirToList(output);
-                    String subdirStr = "subdirs now:";
                     for (String subdir : subdirs) {
+                        if (! subdirSet.contains(subdir)) {
+                            subdirSet.add(subdir);
+                            publishProgress("  " + subdir);
+                        }
                         if (subdir.startsWith("MANIFEST")) {
                             publishProgress("feedme finished!");
                             feedmeRan = true;
                         }
-                        subdirStr += " " + subdir;
                     }
-                    publishProgress(subdirStr);
 
                     if (feedmeRan) {
                         // Feedme ran: get the manifest!
