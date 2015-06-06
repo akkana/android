@@ -104,7 +104,7 @@ public class FeedFetcher {
             logProgress("Already stopped");
             return;
         }
-        logProgress("Cancelling");
+        logProgress("Task still running: trying to cancel.");
         mFetchTask.cancel(true);
         // This might be too early to set mFetchTask to null:
         // I'm hoping it doesn't get garbage collected and
@@ -144,6 +144,7 @@ public class FeedFetcher {
         // because that's what urlrss.cgi uses to decide if it's
         // being called as a CGI script.
         String urlrssURL = mServerUrl + "/feedme/urlrss.cgi?xtraurls=";
+        urlrssURL = mServerUrl + "/feedme/urlrss.cgi?error=";
         Boolean haveURLs = false;
 
         // Read any saved URLs we need to pass to urlrss.
@@ -183,12 +184,9 @@ public class FeedFetcher {
         mFetchTask = new FetchFeedsTask();
         mFetchTask.execute(urlrssURL);
 
-        // Now wait for the task to complete.
-        // The UI can still send a signal to us to stop.
-        // XXX
-
-        // If we're finished, the feeds task shouldn't be running any more.
-        mFetchTask = null;
+        // Execute will return right away, while the task runs on.
+        // XXX Which means that returning true or false from this function
+        // is pretty pointless, and maybe should be rethought.
         return true;
     }
 
@@ -255,8 +253,7 @@ public class FeedFetcher {
                     // But this doesn't work: even after calling cancel
                     // it runs forever.
                     if (isCancelled()) {
-                        publishProgress("Task was cancelled");
-                        break;
+                        return "Cancelled -- not looking for more directories.";
                     }
 
                     // Now check what directories are there so far:
@@ -311,6 +308,9 @@ public class FeedFetcher {
             dd.mkdir();
             String[] filenames = manifest.split("\n+");
             for (String f : filenames) {
+                if (isCancelled())
+                    return "Cancelling file downloads.";
+
                 // Skip directories; we'll make them later with mkdirs.
                 if (f.endsWith("/")) {
                     Log.d("FeedDetcher", f + " is a directory, skipping");
@@ -370,11 +370,19 @@ public class FeedFetcher {
         }
 
         // onPostExecute displays the return value of the AsyncTask.
-        @Override
+        // It's run on the UI thread.
         protected void onPostExecute(String message) {
             logProgress("\nDone with FeedFetcher!\n");
             logProgress(message);
-            //logProgressOnUIThread(message);
+
+            // We're done, so no point in our parent holding on to the task.
+            mFetchTask = null;
+        }
+
+        // I think onCancelled is also run on the UI thread.
+        protected void onCancelled(String message) {
+            logProgress("FeedFetcher task cancelled: message: " + message);
+            mFetchTask = null;
         }
     }
 
