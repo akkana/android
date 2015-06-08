@@ -255,9 +255,32 @@ public class FeedViewer extends Activity implements OnGestureListener {
         //readPreferences();
     } // end onCreate
 
+
+    /* If the FeedViewer activity is killed (or crashes) while a
+     * FeedFetcher AsyncTask is running, we can get an error like:
+  android.view.WindowLeaked: Activity com.shallowsky.FeedViewer.FeedViewer has leaked window com.android.internal.policy.impl.PhoneWindow$DecorView{42b38da0 V.E..... R.....ID 0,0-320,321} that was originally added here
+E/WindowManager(32069):         at com.shallowsky.FeedViewer.FeedViewer.showFeedFetcherProgress(FeedViewer.java:1186)
+E/WindowManager(32069):         at com.shallowsky.FeedViewer.FeedViewer.onOptionsItemSelected(FeedViewer.java:547)
+I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13) has died.
+     * The best way to fix this isn't entirely obvious:
+     * here, we call stop() on any existing FeedFetcher,
+     * which will call cancel() on any fetcher task that might be running.
+     * However, it may take a while for that cancel() to work
+     * (especially if it's waiting on an HTTP download)
+     * so I wonder if Android might still complain about the leak.
+     * Also, are there other places this leak can happen
+     * that might not be covered by onDestroy() ?
+     */
+    @Override
+    public void onDestroy() {
+        if (mFeedFetcher != null)
+            mFeedFetcher.stop();
+    }
+
     // Display a short text message in the doc name area.
     public void showTextMessage(String msg) {
         mDocNameView.setText(msg);
+        Log.d("FeedViewer", msg);
     }
 
     /*********************** begin nev-derived code **************************/
@@ -403,6 +426,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
         unregisterMountListener();
     }
+
     private String url_to_scrollpos_key(String url) {
         Log.d("FeedViewer", "url = '" + url + "'");
         Log.d("FeedViewer", "mLastUrl = '" + mLastUrl + "'");
@@ -608,8 +632,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         String resultspage = "<html>\n<head>\n";
         resultspage += "<title>Feeds</title>\n";
 
-        // Loop over base dirs, in main storage and on the SD card to add stylesheets.
-        // stylesheet needs absolute URLs for style
+        // Loop over base dirs, in main storage and on the SD card to
+        // add stylesheets. stylesheet needs absolute URLs for style
         for (int base = 0; base < mBasePaths.length; ++base) {
             resultspage += "<link rel=\"stylesheet\" type=\"text/css\" title=\"Feeds\" href=\"file://"
                 + mBasePaths[base] + File.separator + "feeds.css\"/>\n";
@@ -710,6 +734,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 return;
             }
             else if (mWebView.canGoBack()) {
+                // Try to use mWebView.goBack() if we can:
                 mWebView.goBack();
                 mWebSettings.setDefaultFontSize(mFontSize);
                 updateBatteryLevel();
@@ -728,6 +753,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
             }
         } catch (Exception e) {
             showTextMessage("Can't go back! " + mWebView.getUrl());
+            Log.d("FeedViewer", "Exception was: " + e);
         }
     }
 
@@ -742,6 +768,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
      * Go to the index page for the current feed.
      */
     public void tableOfContents() {
+        if (onFeedsPage())
+            return;
+
         // Save scroll position in the current document:
         saveStateInPreferences(mWebView.getUrl());
 
@@ -753,7 +782,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
             mWebView.loadUrl("file://" + feeddir.getAbsolutePath()
                     + File.separator + "index.html");
         } catch (URISyntaxException e) {
-            showTextMessage("ToC: URI Syntax");
+            showTextMessage("ToC: URI Syntax: URL was "
+                            + mWebView.getUrl());
+        } catch (NullPointerException e) {
+            showTextMessage("NullPointerException: URL was "
+                            + mWebView.getUrl());
         }
         mWebSettings.setDefaultFontSize(mFontSize);
 
