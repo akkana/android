@@ -144,7 +144,6 @@ public class FeedFetcher {
         // because that's what urlrss.cgi uses to decide if it's
         // being called as a CGI script.
         String urlrssURL = mServerUrl + "/feedme/urlrss.cgi?xtraurls=";
-        urlrssURL = mServerUrl + "/feedme/urlrss.cgi?error=";
         Boolean haveURLs = false;
 
         // Read any saved URLs we need to pass to urlrss.
