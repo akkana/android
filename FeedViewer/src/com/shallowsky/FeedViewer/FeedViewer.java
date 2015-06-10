@@ -275,6 +275,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     public void onDestroy() {
         if (mFeedFetcher != null)
             mFeedFetcher.stop();
+        super.onDestroy();  // to avoid mysterious SuperNotCalledException
     }
 
     // Display a short text message in the doc name area.
@@ -283,17 +284,16 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         Log.d("FeedViewer", msg);
     }
 
-    /*********************** begin nev-derived code **************************/
+    /*********************** begin nev-derived code ************************/
     /**
-     * creates mBroadcastReceiver which handles mounting and unmounting of sdcard
-     * while the application is running.
+     * creates mBroadcastReceiver which handles mounting and
+     * unmounting of sdcard while the application is running.
      *
-     * <p>
-     * mBroadcastReceiver with the registerReceiver() and unregisterMountListener() methods
-     * will provide the functionality of hiding mWebView when the device has unmounted sdcard
-     * because it's connected to PC for example. And it'll reshow and reload the mWebView when
-     * the sdcard is remounted.
-     * </p>
+     * mBroadcastReceiver with the registerReceiver() and
+     * unregisterMountListener() methods will provide the
+     * functionality of hiding mWebView when the device has unmounted
+     * sdcard because it's connected to PC for example. And it'll
+     * reshow and reload the mWebView when the sdcard is remounted.
      */
     private void createBroadcastReceiver() {
         mBroadcastReceiver = new BroadcastReceiver() {
@@ -396,10 +396,9 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     /**
      * Register for MEDIA_MOUNTED and MEDIA_UNMOUNTED system intents.
      *
-     * <p>
-     * We do it this way insted of in AndroidManifest because we're interested in those
-     * intent broadcasts only while we're the user is actively using the application.
-     * </p>
+     * We do it this way insted of in AndroidManifest because we're
+     * interested in those intent broadcasts only while we're the user
+     * is actively using the application.
      */
     private void registerMountListener() {
         IntentFilter intentFilter = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
@@ -979,11 +978,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // Only accept taps in the corners, not the center --
         // otherwise we'll have no way to tap on links at top/bottom.
         float w = mScreenWidth / 4;
-        if (e.getX() > w && e.getX() < mScreenWidth - w)
+        if (e.getRawX() > w && e.getRawX() < mScreenWidth - w) {
+            showTextMessage("not on right or left edges");
             return false;
+        }
 
         // Was the tap at the top or bottom of the screen?
-        if (e.getY() > mScreenHeight * .6) {
+        if (e.getRawY() > mScreenHeight * .8) {
+            showTextMessage("page down " + e.getRawY() + "/" + mScreenHeight);
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageDown(false);
             // Save scroll position in the current document.
@@ -993,13 +995,19 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             saveStateInPreferences(mWebView.getUrl());
            return true;
         }
-        else if (e.getY() < mScreenHeight * .23) {
+        //else if (e.getRawY() < mScreenHeight * .23) {
+        else if (e.getRawY() < 130) {
+            // ICK! but how do we tell how many pixels the buttons take? XXX
+            showTextMessage("page up " + e.getRawY() + "/" + mScreenHeight);
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageUp(false);
             // Save scroll position in the current document (see above caveat):
             saveStateInPreferences(mWebView.getUrl());
            return true;
         }
+        else
+            showTextMessage("tap " + e.getRawX() + "/" + mScreenWidth
+                            + ", " + e.getRawY() + "/" + mScreenHeight);
 
         // Else the tap was somewhere else: pass it along.
         return false;
@@ -1069,14 +1077,13 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     // along the left edge of the screen
     public boolean onScroll(MotionEvent e1, MotionEvent e2,
                             float distanceX, float distanceY) {
-
         final int XTHRESH = 30;
-        if ((e1.getX() < XTHRESH || e2.getX() < XTHRESH) &&
-                (Math.abs(e1.getX() - e2.getX()) < XTHRESH) &&
-                (Math.abs(e1.getY() - e2.getY()) >
-                 2 * Math.abs(e1.getX() - e2.getX()))) {
+        if ((e1.getRawX() < XTHRESH || e2.getRawX() < XTHRESH) &&
+                (Math.abs(e1.getRawX() - e2.getRawX()) < XTHRESH) &&
+                (Math.abs(e1.getRawY() - e2.getRawY()) >
+                 2 * Math.abs(e1.getRawX() - e2.getRawX()))) {
             if (distanceY != 0) {
-                int y = (int)(mScreenHeight - e2.getY());
+                int y = (int)(mScreenHeight - e2.getRawY());
                 int b = (int)(y * 100 / mScreenHeight);
                 showTextMessage("bright " + b + " (y = " + y
                                 + "/" + mScreenHeight + ")");
