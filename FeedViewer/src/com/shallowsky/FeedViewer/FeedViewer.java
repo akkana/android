@@ -950,6 +950,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         return super.onKeyDown(keyCode, event);
     }
 
+    // Volume keys give an annoying beep if you don't override onKeyUp:
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP
+            || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
+            return true;
+        return super.onKeyUp(keyCode, event);
+    }
+
     /*
      * For some reason, this onTouchEvent() is needed to catch events on a WebView.
      * THANK YOU,
