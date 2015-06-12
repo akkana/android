@@ -18,20 +18,11 @@ package com.shallowsky.FeedViewer;
  * Once the initial urlrss.cgi URL has been requested,
  * we wait for it to finish.
  * baseurl = serverurl + "/feeds/" + strftime("%m-%d-%a")
- * We wait for baseurl/LOG to appear,
+ * We wait for baseurl/MANIFEST to appear,
  * meanwhile showing progress by fetching baseurl and parsing it
  * to show which directories have appeared.
  *
- * Finally, when LOG has appeared, the feeds are ready to download.
- * Download everything inside baseurl.
- * This might be tricky because we can't ls the directories inside it
- * (they have index.html files inside them); we can either fetch each
- * index.html file, parse it and fetch all the links inside,
- * or modify urlrss on the server to put a manifest telling us
- * what to download.
- *
- * So far, of course, this class does none of this. It just demonstrates
- * how to fetch a single test file.
+ * Finally, when MANIFEST has appeared, we download all files specified there.
  */
 
 import java.io.IOException;
@@ -268,6 +259,8 @@ public class FeedFetcher {
                             subdirSet.add(subdir);
                             publishProgress("  " + subdir);
                         }
+                        else
+                            publishProgress(".");
                         if (subdir.startsWith("MANIFEST")) {
                             publishProgress("feedme finished!");
                             feedmeRan = true;
@@ -318,6 +311,7 @@ public class FeedFetcher {
                 if (!mFetchImages) {
                     String fl = f.toLowerCase();
                     if (fl.endsWith(".jpg") || fl.endsWith("jpeg")
+                        || fl.endsWith(".svg")
                         || fl.endsWith(".png") || fl.endsWith("gif")) {
                         Log.d("FeedDetcher", "Skipping image " + f);
                         continue;
@@ -402,7 +396,11 @@ public class FeedFetcher {
 }
 
     public void logProgress(String s) {
-        mFeedProgress.log(s + "\n");
+        // Special case for dot: don't include a newline.
+        if (s.equals("."))
+            mFeedProgress.log(s);
+        else
+            mFeedProgress.log(s + "\n");
         Log.d("FeedFetcher", s);
     }
 
