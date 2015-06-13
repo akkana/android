@@ -1085,24 +1085,18 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     // along the left edge of the screen
     public boolean onScroll(MotionEvent e1, MotionEvent e2,
                             float distanceX, float distanceY) {
-        final int XTHRESH = 30;
-        if ((e1.getRawX() < XTHRESH || e2.getRawX() < XTHRESH) &&
-                (Math.abs(e1.getRawX() - e2.getRawX()) < XTHRESH) &&
-                (Math.abs(e1.getRawY() - e2.getRawY()) >
-                 2 * Math.abs(e1.getRawX() - e2.getRawX()))) {
-            if (distanceY != 0) {
-                int y = (int)(mScreenHeight - e2.getRawY());
-                int b = (int)(y * 100 / mScreenHeight);
-                showTextMessage("bright " + b + " (y = " + y
-                                + "/" + mScreenHeight + ")");
-                Log.d("FeedViewer", "bright " + b + " (y = " + y
-                      + "/" + mScreenHeight + ")");
-                setBrightness(b);
-                mBrightness = b;
-            }
-            return true;
-        }
-        return false;
+        final int XTHRESH = 30;    // How close to the left edge need it be?
+        if (e1.getRawX() > XTHRESH) return false;
+        if (e2.getRawX() > XTHRESH) return false;
+        if (distanceY <= 0) return false;
+            
+        int y = (int)(mScreenHeight - e2.getRawY());
+        int b = (int)(y * 100 / mScreenHeight);
+        showTextMessage("bright " + b + " (y = " + y
+                        + "/" + mScreenHeight + ")");
+        setBrightness(b);
+        mBrightness = b;
+        return true;
     }
 
     public void onShowPress(MotionEvent e) {
