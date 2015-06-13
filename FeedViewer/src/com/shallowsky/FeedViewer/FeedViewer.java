@@ -1088,7 +1088,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         final int XTHRESH = 30;    // How close to the left edge need it be?
         if (e1.getRawX() > XTHRESH) return false;
         if (e2.getRawX() > XTHRESH) return false;
-        if (distanceY <= 0) return false;
+        if (distanceY == 0) return false;
             
         int y = (int)(mScreenHeight - e2.getRawY());
         int b = (int)(y * 100 / mScreenHeight);
