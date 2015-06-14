@@ -142,9 +142,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // confusing to the user.
                         if (scrollpos > 0 && mWebView.getScrollY() == 0)
                             mWebView.scrollTo(0,
-                                    (int)Math.round((mWebView.getContentHeight() * mWebView.getScale() * scrollpos - 1) / 100.0));
+                               (int)Math.round((mWebView.getContentHeight()
+                                                * mWebView.getScale()
+                                                * scrollpos - 1) / 100.0));
                         else if (scrollpos > 0)
-                            Log.d("FeedViewer", "Not scrolling because page is already scrolled to " + mWebView.getScrollY());
+                            Log.d("FeedViewer",
+                         "Not scrolling because page is already scrolled to "
+                                  + mWebView.getScrollY());
                         mPageIsLoaded = true;
                         Log.d("FeedViewer", "Page finished: " + url
                               + " scrolled to " + scrollpos);
@@ -165,8 +169,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
                 // Otherwise, we'll try to load something.
                 // First, save our position on the current page.
-                showTextMessage("Saving scroll position");
-                saveStateInPreferences(mWebView.getUrl());
+                saveStateInPreferences();
 
                 try {
                     URI uri = new URI(url);
@@ -230,7 +233,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mFeedlistButton = (Button) findViewById(R.id.feedListButton);
         mFeedlistButton.setOnClickListener(new OnClickListener() {
             public void onClick(View v) {
-                saveStateInPreferences(mWebView.getUrl());
+                saveStateInPreferences();
                 loadFeedList();
             }
         });
@@ -255,6 +258,54 @@ public class FeedViewer extends Activity implements OnGestureListener {
         //readPreferences();
     } // end onCreate
 
+    /********  APP LIFECYCLE FUNCTIONS *******/
+
+    /**
+     * Main entry point to the app.
+     *
+     * This is called after onCreate() or any time when the system
+     * switches back to the app. Use it to load data, return to saved
+     * state and add custom behaviour.
+     */
+    @Override
+    public void onResume() {
+        Log.d("FeedViewer", "onResume");
+        super.onResume();
+
+        readPreferences();
+
+        checkForSDCard();
+
+        if (mSDCardMounted)
+            loadData();
+        else {
+            showTextMessage("SD card not mounted");
+            mWebView.setVisibility(View.GONE);
+        }
+
+        registerMountListener();
+
+        // Now do all the initialization stuff, now that we've read prefs
+        // and have our SD card loaded.
+        setBrightness(mBrightness);
+        Log.d("FeedViewer", "Setting brightness to remembered " + mBrightness);
+
+        if (! onFeedsPage()) {
+            Log.d("FeedViewer", "Not on feeds page; trying to load that url");
+            try {
+                //showTextMessage("Remembered " + mLastUrl);
+                mWebView.loadUrl(mLastUrl);
+                mWebSettings.setDefaultFontSize(mFontSize);
+            }
+            catch (Exception e) {
+                mLastUrl = null;
+            }
+        }
+        // If that didn't work, or if no last url, load the feeds list.
+        if (onFeedsPage()) {
+            loadFeedList();
+        }
+    }
 
     /* If the FeedViewer activity is killed (or crashes) while a
      * FeedFetcher AsyncTask is running, we can get an error like:
@@ -275,16 +326,55 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     public void onDestroy() {
         if (mFeedFetcher != null)
             mFeedFetcher.stop();
+
+        // onDestroy() is never supposed to be called without onPause()
+        // being called first; but some people say it happens, and
+        // clearly we're sometimes getting killed without prefs being
+        // saved, so try saving them again here:
+        saveStateInPreferences();
+
         super.onDestroy();  // to avoid mysterious SuperNotCalledException
     }
 
-    // Display a short text message in the doc name area.
-    public void showTextMessage(String msg) {
-        mDocNameView.setText(msg);
-        Log.d("FeedViewer", msg);
+    /** Saves app state and unregisters mount listeners.
+     *
+     * This is basically last point Android system promises you can do anything.
+     * You can safely ignore other lifecycle methods.
+     */
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        saveStateInPreferences();
+
+        unregisterMountListener();
+    }
+    /********  END APP LIFECYCLE FUNCTIONS *******/
+
+    /********  HANDLE EXTERNAL SDCARD EVENTS *******/
+
+    /**
+     * Register for MEDIA_MOUNTED and MEDIA_UNMOUNTED system intents.
+     *
+     * We do it this way insted of in AndroidManifest because we're
+     * interested in those intent broadcasts only while we're the user
+     * is actively using the application.
+     */
+    private void registerMountListener() {
+        IntentFilter intentFilter
+            = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
+        intentFilter.addAction(Intent.ACTION_MEDIA_UNMOUNTED);
+        intentFilter.addDataScheme("file");
+        this.registerReceiver(mBroadcastReceiver, intentFilter);
     }
 
-    /*********************** begin nev-derived code ************************/
+    /* Code from nev to handle mounts/unmounts */
+
+    /** Unregister for MEDIA_MOUNTED and MEDIA_UNMOUNTED system intents. */
+    private void unregisterMountListener() {
+        this.unregisterReceiver(mBroadcastReceiver);
+    }
+
     /**
      * creates mBroadcastReceiver which handles mounting and
      * unmounting of sdcard while the application is running.
@@ -322,56 +412,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         };
     }
 
-    /**
-     * Main entry point to the app.
-     *
-     * This is called after onCreate() or anytime when the system
-     * switches back to your app. Use it to load data, return to saved
-     * state and add custom behaviour.
-     */
-    @Override
-    public void onResume() {
-        Log.d("FeedViewer", "onResume");
-        super.onResume();
-
-        readPreferences();
-
-        checkForSDCard();
-
-        if (mSDCardMounted)
-            loadData();
-        else {
-            showTextMessage("SD card not mounted");
-            mWebView.setVisibility(View.GONE);
-        }
-
-        //Log.d("FeedViewer", "Inside onResume() mScrollPosition is: " + getScrollFromPreferences(mLastUrl)
-        //        + " for " + mLastUrl);
-
-        registerMountListener();
-
-        // Now do all the initialization stuff, now that we've read prefs
-        // and have our SD card loaded.
-        setBrightness(mBrightness);
-        Log.d("FeedViewer", "Setting brightness to remembered " + mBrightness);
-
-        if (! onFeedsPage()) {
-            Log.d("FeedViewer", "Not on feeds page; trying to load that url");
-            try {
-                //showTextMessage("Remembered " + mLastUrl);
-                mWebView.loadUrl(mLastUrl);
-                mWebSettings.setDefaultFontSize(mFontSize);
-            }
-            catch (Exception e) {
-                mLastUrl = null;
-            }
-        }
-        // If that didn't work, or if no last url, load the feeds list.
-        if (onFeedsPage()) {
-            loadFeedList();
-        }
-    }
-
     /** Check if the SD Card is mounted. */
     private void checkForSDCard() {
         String storageState = Environment.getExternalStorageState();
@@ -379,6 +419,15 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             mSDCardMounted = true;
         else
             mSDCardMounted = false;
+    }
+    /********  END EXTERNAL SDCARD HANDLING *******/
+
+    /********  General Utility Functions *******/
+
+    // Display a short text message in the doc name area.
+    public void showTextMessage(String msg) {
+        mDocNameView.setText(msg);
+        Log.d("FeedViewer", msg);
     }
 
     /** Load the webpage into mWebView. */
@@ -391,39 +440,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             loadFeedList();
 
         mWebView.setVisibility(View.VISIBLE);
-    }
-
-    /**
-     * Register for MEDIA_MOUNTED and MEDIA_UNMOUNTED system intents.
-     *
-     * We do it this way insted of in AndroidManifest because we're
-     * interested in those intent broadcasts only while we're the user
-     * is actively using the application.
-     */
-    private void registerMountListener() {
-        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
-        intentFilter.addAction(Intent.ACTION_MEDIA_UNMOUNTED);
-        intentFilter.addDataScheme("file");
-        this.registerReceiver(mBroadcastReceiver, intentFilter);
-    }
-
-    /** Unregister for MEDIA_MOUNTED and MEDIA_UNMOUNTED system intents. */
-    private void unregisterMountListener() {
-        this.unregisterReceiver(mBroadcastReceiver);
-    }
-
-    /** Saves app state and unregisters mount listeners.
-     *
-     * This is basically last point Android system promises you can do anything.
-     * You can safely ignore other lifecycle methods.
-     */
-    @Override
-    public void onPause() {
-        super.onPause();
-
-        saveStateInPreferences(mWebView.getUrl());
-
-        unregisterMountListener();
     }
 
     private String url_to_scrollpos_key(String url) {
@@ -446,19 +462,20 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     /** Save app state into SharedPreferences */
-    private void saveStateInPreferences(String url) {
+    private void saveStateInPreferences() {
         Log.d("FeedViewer", "************* Saving preferences");
+        String url = mWebView.getUrl();
         SharedPreferences.Editor editor = mSharedPreferences.edit();
         String key = url_to_scrollpos_key(url);
         int scrollpos = calculatePagePosition();
         //showTextMessage("save pos " + scrollpos + " for " + key);
         Log.d("FeedViewer", "save pos " + scrollpos + " for " + key);
         editor.putInt(key, scrollpos);
+        editor.putString("url", url);
 
         // As long as we're saving, save our other prefs too:
         editor.putInt("font_size", mFontSize);
         editor.putInt("brightness", mBrightness);
-        editor.putString("url", mLastUrl);
 
         editor.commit();
 
@@ -506,7 +523,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         float currentY = mWebView.getScrollY();
         return Math.round(100 * currentY / contentHeight);
     }
-    /*********************** end nev code **************************/
 
     // Figure out a sane URI that can be turned into a path
     // for the webview's current URI. Otherwise, we'll get things
@@ -546,32 +562,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         //setContentView(R.layout.main);
     }
     */
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        MenuInflater inflater = getMenuInflater();
-        inflater.inflate(R.menu.menu, menu);
-        return true;
-    }
-
-    /* Handles item selections */
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-        case R.id.bigger:
-            mWebSettings.setDefaultFontSize(++mFontSize);
-            showTextMessage("bigger:" + mFontSize);
-            return true;
-        case R.id.smaller:
-            mWebSettings.setDefaultFontSize(--mFontSize);
-            showTextMessage("smaller:" + mFontSize);
-            return true;
-        case R.id.feedfetcher:
-            showFeedFetcherProgress();
-            return true;
-       }
-        return false;
-     }
 
     public void handleExternalLink(final String url) {
         // Pop up a dialog:
@@ -626,7 +616,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      */
     public void loadFeedList() {
         // Save scroll position in the current document:
-        saveStateInPreferences(mWebView.getUrl());
+        saveStateInPreferences();
 
         String resultspage = "<html>\n<head>\n";
         resultspage += "<title>Feeds</title>\n";
@@ -691,7 +681,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         // Keep the font size the way the user asked:
         mWebSettings.setDefaultFontSize(mFontSize);
-        updateBatteryLevel();
+        //updateBatteryLevel();
         mLastUrl = null;
            // don't count on this null -- may get overridden. Use onFeedsPage().
 
@@ -703,7 +693,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      */
     public void goBack() {
         // Save scroll position in the current document:
-        saveStateInPreferences(mWebView.getUrl());
+        saveStateInPreferences();
 
         try {
             if (onFeedsPage()) {  // already on a generated page, probably feeds
@@ -730,20 +720,17 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             if (upupFeeds &&
                 filepath.getName().equals("index.html")) {
                 loadFeedList();
-                return;
             }
             else if (mWebView.canGoBack()) {
                 // Try to use mWebView.goBack() if we can:
                 mWebView.goBack();
                 mWebSettings.setDefaultFontSize(mFontSize);
-                updateBatteryLevel();
-                return;
+                //updateBatteryLevel();
             }
             else if (upupFeeds) {
                 // We're on a third-level page;
                 // go to the table of contents page for this feed.
                 tableOfContents();
-                return;
             }
             else {
                 // Don't know where we are! Shouldn't happen, but probably does.
@@ -754,13 +741,16 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             showTextMessage("Can't go back! " + mWebView.getUrl());
             Log.d("FeedViewer", "Exception was: " + e);
         }
+
+        // Save the new document location regardless of where we ended up:
+        saveStateInPreferences();
     }
 
     public void goForward() {
-        saveStateInPreferences(mWebView.getUrl());
+        saveStateInPreferences();
         mWebView.goForward();
         mWebSettings.setDefaultFontSize(mFontSize);
-        updateBatteryLevel();
+        //updateBatteryLevel();
    }
 
     /*
@@ -771,7 +761,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             return;
 
         // Save scroll position in the current document:
-        saveStateInPreferences(mWebView.getUrl());
+        saveStateInPreferences();
 
         // In theory, we're already in the right place, so just load relative
         // index.html -- but nope, that doesn't work.
@@ -790,6 +780,24 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         mWebSettings.setDefaultFontSize(mFontSize);
 
         //saveSettings();  // Hopefully this will happen on page load.
+    }
+
+    public void setBrightness(int value) {
+        // If mBrightness is 0, brightness probably hasn't been read
+        // from preferences yet.
+        if (mBrightness <= 0)
+            return;
+
+        LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = (float) value / 100;
+        //lp.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+
+        // This is supposed to turn off the annoying button lights: see
+        // http://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#buttonBrightness
+        // Alas, it doesn't actually do anything.
+        lp.buttonBrightness = LayoutParams.BRIGHTNESS_OVERRIDE_OFF;
+
+        getWindow().setAttributes(lp);
     }
 
     /*
@@ -814,7 +822,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     // Clean up any scroll preferences for files/directories we've deleted.
     // That includes not just what we just immediately deleted, but anything
-    // that was deleted previously and somehow didn't get its preference removed.
+    // that was deleted previously and somehow didn't get its pref removed.
     private void cleanUpScrollPrefs(String dirstr) {
         Log.d("FeedViewer", "==========\nTrying to delete prefs matching " + dirstr);
         SharedPreferences.Editor editor = mSharedPreferences.edit();
@@ -931,6 +939,38 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     }
 
+    /************** UI CODE **************/
+
+    /************** Main Menu **************/
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.menu, menu);
+        return true;
+    }
+
+    /* Handles menu item selections */
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+        case R.id.bigger:
+            mWebSettings.setDefaultFontSize(++mFontSize);
+            showTextMessage("bigger:" + mFontSize);
+            return true;
+        case R.id.smaller:
+            mWebSettings.setDefaultFontSize(--mFontSize);
+            showTextMessage("smaller:" + mFontSize);
+            return true;
+        case R.id.feedfetcher:
+            showFeedFetcherProgress();
+            return true;
+        }
+        return false;
+    }
+
+    /************** Events **************/
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         showTextMessage("");
@@ -959,7 +999,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     /*
-     * For some reason, this onTouchEvent() is needed to catch events on a WebView.
+     * For some reason, onTouchEvent() is needed to catch events on a WebView.
      * THANK YOU,
 
      * http://www.tutorialforandroid.com/2009/06/implement-gesturedetector-in-android.html
@@ -982,6 +1022,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         return this.detector.onTouchEvent(me);
     }
 
+    // Tapping in the corners of the screen scroll up or down.
     public boolean scrollIfInTargetZone(MotionEvent e) {
         // Only accept taps in the corners, not the center --
         // otherwise we'll have no way to tap on links at top/bottom.
@@ -1000,7 +1041,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             // (This may save the previous position, not the newly
             // scrolled to one, but at least we'll guarantee we've
             // saved the current document.)
-            saveStateInPreferences(mWebView.getUrl());
+            saveStateInPreferences();
            return true;
         }
         //else if (e.getRawY() < mScreenHeight * .23) {
@@ -1010,7 +1051,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageUp(false);
             // Save scroll position in the current document (see above caveat):
-            saveStateInPreferences(mWebView.getUrl());
+            saveStateInPreferences();
            return true;
         }
         else
@@ -1028,24 +1069,42 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         //showTextMessage("onSingleTapConfirmed");
         return scrollIfInTargetZone(e);
     }
+
     public boolean onSingleTapUp(MotionEvent e) {
         //showTextMessage("onSingleTapUp");
         return scrollIfInTargetZone(e);
     }
 
+    // Set brightness if the user scrolls (drags)
+    // along the left edge of the screen
+    public boolean onScroll(MotionEvent e1, MotionEvent e2,
+                            float distanceX, float distanceY) {
+        final int XTHRESH = 30;    // How close to the left edge need it be?
+        if (e1.getRawX() > XTHRESH) return false;
+        if (e2.getRawX() > XTHRESH) return false;
+        if (distanceY == 0) return false;
+            
+        int y = (int)(mScreenHeight - e2.getRawY());
+        int b = (int)(y * 100 / mScreenHeight);
+        showTextMessage("bright " + b + " (y = " + y
+                        + "/" + mScreenHeight + ")");
+        setBrightness(b);
+        mBrightness = b;
+        return true;
+    }
+
+    /***** Events we're required to override to implement OnGestureListener
+     *     even if we don't use them.
+     */
+
+    // Would like to use longpress for something useful, like following
+    // a link or viewing an image, if I could figure out how.
     public void onLongPress(MotionEvent e) {
         // Want to convert a longpress into a regular single tap,
         // so the user can longpress to activate links rather than scrolling.
         showTextMessage("onLongPress");
         super.onTouchEvent(e);
         //scrollIfInTargetZone(e);
-    }
-
-    public boolean onDoubleTap(MotionEvent e) {
-        // Want to convert a longpress into a regular single tap,
-        // so the user can longpress to activate links rather than scrolling.
-        showTextMessage("onDoubleTap");
-        return super.onTouchEvent(e);
     }
 
     public boolean onDown(MotionEvent e) {
@@ -1081,32 +1140,25 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         return false;
     }
 
-    // Set brightness if the user scrolls (drags)
-    // along the left edge of the screen
-    public boolean onScroll(MotionEvent e1, MotionEvent e2,
-                            float distanceX, float distanceY) {
-        final int XTHRESH = 30;    // How close to the left edge need it be?
-        if (e1.getRawX() > XTHRESH) return false;
-        if (e2.getRawX() > XTHRESH) return false;
-        if (distanceY == 0) return false;
-            
-        int y = (int)(mScreenHeight - e2.getRawY());
-        int b = (int)(y * 100 / mScreenHeight);
-        showTextMessage("bright " + b + " (y = " + y
-                        + "/" + mScreenHeight + ")");
-        setBrightness(b);
-        mBrightness = b;
-        return true;
-    }
-
     public void onShowPress(MotionEvent e) {
         //showTextMessage("onShowPress");
     }
 
+    /* We don't actually have to implement onDoubleTap:
+    public boolean onDoubleTap(MotionEvent e) {
+        showTextMessage("onDoubleTap");
+        return super.onTouchEvent(e);
+    }
+    */
+
+    /***** End required OnGestureListener events we don't actually use */
+
+    /*********** CODE NOT CURRENTLY USED (but maybe some day) ********/
+
+    /*
     // Try to disable the obnoxiously bright button backlight.
     // http://stackoverflow.com/questions/1966019/turn-off-buttons-backlight
     // Alas, it does nothing on Samsungs (big surprise).
-    /*
     private void setDimButtons(boolean dimButtons) {
         Window window = getWindow();
         LayoutParams layoutParams = window.getAttributes();
@@ -1122,29 +1174,10 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
     */
 
-    public void setBrightness(int value) {
-        // If mBrightness is 0, brightness probably hasn't been read
-        // from preferences yet.
-        if (mBrightness <= 0)
-            return;
-
-        LayoutParams lp = getWindow().getAttributes();
-        lp.screenBrightness = (float) value / 100;
-        //lp.flags |= WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
-
-        // This is supposed to turn off the annoying button lights: see
-        // http://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#buttonBrightness
-        // Alas, it doesn't actually do anything.
-        lp.buttonBrightness = LayoutParams.BRIGHTNESS_OVERRIDE_OFF;
-
-        getWindow().setAttributes(lp);
-    }
-
     /**
      * Computes the battery level by registering a receiver to the intent triggered
      * by a battery status/level change.
      * Thank you http://mihaifonoage.blogspot.com/2010/02/getting-battery-level-in-android-using.html
-     */
     private void updateBatteryLevel() {
         BroadcastReceiver batteryLevelReceiver = new BroadcastReceiver() {
             @Override
@@ -1162,23 +1195,9 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         IntentFilter batteryLevelFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         registerReceiver(batteryLevelReceiver, batteryLevelFilter);
     }
+     */
 
-    // Callbacks for buttons in the FeedFetcher dialog:
-
-    private void toggleFeedFetcherImages(View v) {
-        Boolean fetch = mFeedFetcher.toggleImages();
-        // Set the text of the button to indicate what's being fetched
-        if (fetch)
-            ((Button)v).setText("No images");
-        else
-            ((Button)v).setText("Images");
-    }
-
-    private void stopFeeds() {
-        mFeedFetcher.stop();
-        mFeedFetcher = null;
-        mFeedFetcherDialog.dismiss();
-    }
+    /********** FeedFetcher dialog ******/
 
     private void showFeedFetcherProgress() {
 
@@ -1226,5 +1245,22 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         }
 
         mFeedFetcherDialog.show();
+    }
+
+    /********** Callbacks for buttons in the FeedFetcher dialog ******/
+
+    private void toggleFeedFetcherImages(View v) {
+        Boolean fetch = mFeedFetcher.toggleImages();
+        // Set the text of the button to indicate what's being fetched
+        if (fetch)
+            ((Button)v).setText("No images");
+        else
+            ((Button)v).setText("Images");
+    }
+
+    private void stopFeeds() {
+        mFeedFetcher.stop();
+        mFeedFetcher = null;
+        mFeedFetcherDialog.dismiss();
     }
 }
