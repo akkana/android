@@ -89,7 +89,7 @@
     />
 </LinearLayout>
 
-<WebView xmlns:android="http://schemas.android.com/apk/res/android"
+<com.shallowsky.FeedViewer.ObservableWebView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/webview"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"

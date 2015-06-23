@@ -52,7 +52,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     private GestureDetector detector;
 
-    WebView mWebView;
+    ObservableWebView mWebView;
 
     Button mBackButton;
     Button mFwdButton;
@@ -62,6 +62,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
     Button mBiggerButton;
     TextView mDocNameView;
     TextView mBatteryLevel;
+
     // XXX This needs to be revisited, obviously,
     // to allow the option of non external SD card too.
     String mWritableDir = "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer";
@@ -81,7 +82,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     float mScreenWidth;
     float mScreenHeight;
-    long mScrollLock = 0;  // used for delays for scrolling, avoiding longpress
+
+    // Delays: variables used to hold time and lock actions.
+    long mScrollLock = 0;          // delays for scrolling, avoiding longpress
+    long mLastSavedScrollPos = 0;  // delay saving scroll pos after scrolling
+
     WebSettings mWebSettings; // Settings for the WebView, e.g. font size.
 
     FeedFetcher mFeedFetcher = null;
@@ -109,7 +114,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
         setContentView(R.layout.main);
         detector = new GestureDetector(this, this);
 
-        mWebView = (WebView)findViewById(R.id.webview);
+        mWebView = (ObservableWebView)findViewById(R.id.webview);
         mWebSettings = mWebView.getSettings();
         mWebSettings.setJavaScriptEnabled(false);
         mFontSize = mWebSettings.getDefaultFontSize();
@@ -122,36 +127,65 @@ public class FeedViewer extends Activity implements OnGestureListener {
              * Jumping through the hoops. We'll delay the calling of
              * scrollTo for N miliseconds after system loads the page.
              * This is needed since onPageFinished() can be called
-             * before it loads whole page for some reason, so give the
-             * system some time...
+             * before it loads the whole page (finished doesn't actually
+             * mean finished), so give the system some time.
+             * Would be great if Android could give us callbacks
+             * when things were REALLY finished loading or scrolling.
              */
             @Override
             public void onPageFinished(WebView webView, final String url) {
                 Log.d("FeedViewer", "onPageFinished " + url);
                 mWebView.postDelayed(new Runnable() {
-                    // XXX Eclipse gives me a "Method must override
-                    // superclass method" error if I include the
-                    // Override. But will it work without it? Override
                     public void run() {
+                        mPageIsLoaded = true;
+
                         Log.d("FeedViewer", "pageFinished postDelayed " + url);
+                        /* Might need to comment out this next section.
+                         * Sometimes it gets triggered wrongly,
+                         * and this gets called when the page is scrolled
+                         * to a position other than where it really was last.
+                         * I have no idea why that happens.
+                         *
+                         * But it means that our saved page positions need
+                         * to be fairly good since we can't ever rely on
+                         * the WebView's own memory of page position. Sigh.
+                         *
+                        if (mWebView.getScrollY() != 0) {
+                            Log.d("FeedViewer",
+                                  "Not scrolling, page is already scrolled to "
+                                  + (int)Math.round(mWebView.getScrollY()
+                                                     * 100.
+                                                 / mWebView.getContentHeight()
+                                                 / mWebView.getScale()));
+                            return;
+                        }
+                         */
+
+                        // If we went to a named anchor (with #),
+                        // we don't want to scroll the page.
+                        // This also implies we shouldn't save named anchors
+                        // as part of a saved URL since it will prevent us
+                        // from scrolling when we go back to that page.
+                        if (url.indexOf('#') > 0)
+                            return;
+
                         int scrollpos = getScrollFromPreferences(url);
+                        if (scrollpos == 0) {
+                            Log.d("FeedViewer", "Not scrolling, scrollpos = 0");
+                            return;
+                        }
+
                         // Scroll a little above the remembered
                         // position -- else rounding errors may scroll
                         // us too far down to where the most recently
                         // read story isn't visible, which is
                         // confusing to the user.
-                        if (scrollpos > 0 && mWebView.getScrollY() == 0)
-                            mWebView.scrollTo(0,
+                        mWebView.scrollTo(0,
                                (int)Math.round((mWebView.getContentHeight()
                                                 * mWebView.getScale()
                                                 * scrollpos - 1) / 100.0));
-                        else if (scrollpos > 0)
-                            Log.d("FeedViewer",
-                         "Not scrolling because page is already scrolled to "
-                                  + mWebView.getScrollY());
-                        mPageIsLoaded = true;
                         Log.d("FeedViewer", "Page finished: " + url
-                              + " scrolled to " + scrollpos);
+                              + " should be scrolled to " + scrollpos);
                     }
                 }, 300);
             }
@@ -253,6 +287,15 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mWebView.setBackgroundColor(0xff999999);
             // can't use black, no way to change fg
 
+        // Now that everything's set up, maybe it's safe to set up
+        // the scroll listener:
+        mWebView.setOnScrollChangedCallback(new ObservableWebView.OnScrollChangedCallback() {
+            public void onScroll(int l, int t) {
+                Log.d("FeedViewer", "Saving state because we scrolled");
+                maybeSaveScrollState();
+            }
+        });
+
         // Read preferences in onResume instead of here,
         // and load the page there too.
         //readPreferences();
@@ -272,6 +315,11 @@ public class FeedViewer extends Activity implements OnGestureListener {
         Log.d("FeedViewer", "onResume");
         super.onResume();
 
+        // Prevent any saving of the scroll position for quite a while:
+        // we're going to get a ton of events and and scroll positions
+        // and many of them will be wrong.
+        mLastSavedScrollPos = 0;
+
         readPreferences();
 
         checkForSDCard();
@@ -288,10 +336,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         // Now do all the initialization stuff, now that we've read prefs
         // and have our SD card loaded.
         setBrightness(mBrightness);
-        Log.d("FeedViewer", "Setting brightness to remembered " + mBrightness);
 
         if (! onFeedsPage()) {
-            Log.d("FeedViewer", "Not on feeds page; trying to load that url");
             try {
                 //showTextMessage("Remembered " + mLastUrl);
                 mWebView.loadUrl(mLastUrl);
@@ -442,44 +488,99 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         mWebView.setVisibility(View.VISIBLE);
     }
 
+    // Eliminate any # named anchor positioning from a URL.
+    private String remove_named_anchor(String url) {
+        int hash = url.indexOf('#');
+        if (hash <= 0)
+            return url;
+        return url.substring(0, hash);
+    }
+
+    // The url passed in here should already have had named anchors stripped.
     private String url_to_scrollpos_key(String url) {
-        Log.d("FeedViewer", "url = '" + url + "'");
-        Log.d("FeedViewer", "mLastUrl = '" + mLastUrl + "'");
         if (onFeedsPage() || nullURL(url))
             return "feeds_scrollpos";
-        Log.d("FeedViewer", "Not on feeds page. Is it empty? " + url.isEmpty());
         String urlkey = url;
         if (urlkey.startsWith("file://")) {
             urlkey = urlkey.substring(7);
         }
 
-        // Eliminate any # positioning
-        int hash = urlkey.indexOf('#');
-        if (hash > 0)
-            urlkey = urlkey.substring(0, hash);
-
         return urlkey + "_scrollpos";
+    }
+
+    private void saveScrollPos(SharedPreferences.Editor editor) {
+        String url = remove_named_anchor(mWebView.getUrl());
+        String key = url_to_scrollpos_key(url);
+        int scrollpos = calculatePagePosition();
+        // Sometimes we spuriously get called when page position is 0,
+        // maybe because the page isn't fully loaded. If so, don't save.
+        if (scrollpos > 0) {
+            Log.d("FeedViewer", "Saving scroll pos " + scrollpos
+                  + " for " + key);
+            editor.putInt(key, scrollpos);
+            editor.putString("url", url);
+            mLastSavedScrollPos = SystemClock.uptimeMillis();
+        }
+        else
+            Log.d("FeedViewer", "Not saving zero scrollpos for " + key);
     }
 
     /** Save app state into SharedPreferences */
     private void saveStateInPreferences() {
         Log.d("FeedViewer", "************* Saving preferences");
-        String url = mWebView.getUrl();
         SharedPreferences.Editor editor = mSharedPreferences.edit();
-        String key = url_to_scrollpos_key(url);
-        int scrollpos = calculatePagePosition();
-        //showTextMessage("save pos " + scrollpos + " for " + key);
-        Log.d("FeedViewer", "save pos " + scrollpos + " for " + key);
-        editor.putInt(key, scrollpos);
-        editor.putString("url", url);
 
         // As long as we're saving, save our other prefs too:
         editor.putInt("font_size", mFontSize);
         editor.putInt("brightness", mBrightness);
 
+        saveScrollPos(editor);
+
         editor.commit();
 
         printPreferences();
+    }
+
+    /** Save the current scroll state (but not other preferences)
+     *  only if it's been long enough since the last time we saved.
+     * If it's been less than 5 seconds since we last saved, don't
+     * do anything. If it's been more than that, schedule a save
+     * to happen after 1 sec (and don't reset the timer until that
+     * save fires off).
+     */
+    private void maybeSaveScrollState() {
+        final long HOWOFTEN = 5000;  // Don't save more often than this
+        final long SCROLL_SAVE_DELAY = 1500;  // delay saves by this much
+
+        long now = SystemClock.uptimeMillis();
+
+        // The first time this is called, we're probably in the middle of
+        // initialization, there might be random scrolling going on,
+        // and it would be good to delay saving anything new for quite
+        // a while to avoid overwriting the scroll position read from prefs.
+        if (mLastSavedScrollPos <= 0) {
+            Log.d("FeedViewer",
+                  "First time in maybeSaveScrollState, delaying 10 seconds");
+            mLastSavedScrollPos = now + 10000;
+            return;
+        }
+
+        if (now < mLastSavedScrollPos + HOWOFTEN) {
+            Log.d("FeedViewer", "Not saving scroll pos -- too early");
+            return;
+        }
+
+        Log.d("FeedViewer", "Scheduling save of scroll pos");
+        mLastSavedScrollPos = now;
+        Log.d("FeedViewer", "posting delayed scroll saving");
+        mWebView.postDelayed(new Runnable() {
+                public void run() {
+                    Log.d("FeedViewer", "*** After delay, saving scroll pos");
+                    SharedPreferences.Editor editor = mSharedPreferences.edit();
+                    saveScrollPos(editor);
+                    editor.commit();
+                }
+        }, SCROLL_SAVE_DELAY);
     }
 
     private void printPreferences() {
@@ -743,7 +844,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         }
 
         // Save the new document location regardless of where we ended up:
-        saveStateInPreferences();
+        // But this won't work because the document hasn't loaded yet.
+        //saveStateInPreferences();
     }
 
     public void goForward() {
@@ -1028,35 +1130,25 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // otherwise we'll have no way to tap on links at top/bottom.
         float w = mScreenWidth / 4;
         if (e.getRawX() > w && e.getRawX() < mScreenWidth - w) {
-            showTextMessage("not on right or left edges");
             return false;
         }
 
         // Was the tap at the top or bottom of the screen?
         if (e.getRawY() > mScreenHeight * .8) {
-            showTextMessage("page down " + e.getRawY() + "/" + mScreenHeight);
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageDown(false);
-            // Save scroll position in the current document.
-            // (This may save the previous position, not the newly
-            // scrolled to one, but at least we'll guarantee we've
-            // saved the current document.)
-            saveStateInPreferences();
+            // Don't try to save page position: we'll do that after scroll
+            // when we have a new page position.
            return true;
         }
         //else if (e.getRawY() < mScreenHeight * .23) {
         else if (e.getRawY() < 130) {
             // ICK! but how do we tell how many pixels the buttons take? XXX
-            showTextMessage("page up " + e.getRawY() + "/" + mScreenHeight);
             mScrollLock = SystemClock.uptimeMillis();
             mWebView.pageUp(false);
-            // Save scroll position in the current document (see above caveat):
-            saveStateInPreferences();
+            // Again, don't save page position here, wait for callback.
            return true;
         }
-        else
-            showTextMessage("tap " + e.getRawX() + "/" + mScreenWidth
-                            + ", " + e.getRawY() + "/" + mScreenHeight);
 
         // Else the tap was somewhere else: pass it along.
         return false;
