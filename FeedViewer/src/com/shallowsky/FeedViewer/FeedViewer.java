@@ -166,8 +166,12 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // This also implies we shouldn't save named anchors
                         // as part of a saved URL since it will prevent us
                         // from scrolling when we go back to that page.
-                        if (url.indexOf('#') > 0)
+                        // However, we do want to record the new scroll pos.
+                        // maybeSaveScrollState will set another delay.
+                        if (url.indexOf('#') > 0) {
+                            maybeSaveScrollState();
                             return;
+                        }
 
                         int scrollpos = getScrollFromPreferences(url);
                         if (scrollpos == 0) {
@@ -807,7 +811,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             final File filepath = new File(uri.getPath());
             String upup = filepath.getParentFile().getParentFile()
                 .getParentFile().getName();
-            Log.d("FeedViewer", "upup = " + upup);
+            Log.d("FeedViewer", "upup = " + upup + " from " + filepath);
 
             // Unfortunately WebView doesn't handle history properly
             // for generated pages, so canGoBack() will return true
@@ -822,15 +826,24 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                 filepath.getName().equals("index.html")) {
                 loadFeedList();
             }
+            /*
+             * WebView.canGoBack() isn't reliable: it often returns true
+             * even when it can't go back, and goBack() will be a no-op.
+             * Unfortunately there's no way to check after calling goBack
+             * that it failed, so the only option seems to be to
+             * stop trusting canGoBack() and never use goBack().
             else if (mWebView.canGoBack()) {
                 // Try to use mWebView.goBack() if we can:
+                Log.d("FeedViewer", "Trying to goBack()");
                 mWebView.goBack();
                 mWebSettings.setDefaultFontSize(mFontSize);
                 //updateBatteryLevel();
             }
+             */
             else if (upupFeeds) {
                 // We're on a third-level page;
                 // go to the table of contents page for this feed.
+                Log.d("FeedViewer", "going to table of contents");
                 tableOfContents();
             }
             else {
