@@ -500,6 +500,16 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         return url.substring(0, hash);
     }
 
+    /* Calculate mWebView position in perecentage */
+    private int calculatePagePosition() {
+        if (!mPageIsLoaded)
+            return 0;
+
+        float contentHeight = mWebView.getContentHeight() * mWebView.getScale();
+        float currentY = mWebView.getScrollY();
+        return Math.round(100 * currentY / contentHeight);
+    }
+
     // The url passed in here should already have had named anchors stripped.
     private String url_to_scrollpos_key(String url) {
         if (onFeedsPage() || nullURL(url))
@@ -513,20 +523,28 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     private void saveScrollPos(SharedPreferences.Editor editor) {
+        // XXX Sometimes, when going back from a third-level page to its ToC,
+        // if we call calculatePagePosition after setting url and key,
+        // we will end up with url being the ToC index page,
+        // but scrollpos being the position on the sub-page we just came from.
+        Log.d("FeedViewer", "saveScrollPos 1: url = " + mWebView.getUrl()
+              + ", scrollY = " + mWebView.getScrollY());
+        int scrollpos = calculatePagePosition();
         String url = remove_named_anchor(mWebView.getUrl());
         String key = url_to_scrollpos_key(url);
-        int scrollpos = calculatePagePosition();
+        Log.d("FeedViewer", "saveScrollPos 2: url = " + mWebView.getUrl()
+              + ", scrollY = " + mWebView.getScrollY());
         // Sometimes we spuriously get called when page position is 0,
         // maybe because the page isn't fully loaded. If so, don't save.
-        if (scrollpos > 0) {
+        if (scrollpos <= 0)
+            Log.d("FeedViewer", "Not saving zero scrollpos for " + key);
+        else {
             Log.d("FeedViewer", "Saving scroll pos " + scrollpos
                   + " for " + key);
             editor.putInt(key, scrollpos);
             editor.putString("url", url);
             mLastSavedScrollPos = SystemClock.uptimeMillis();
         }
-        else
-            Log.d("FeedViewer", "Not saving zero scrollpos for " + key);
     }
 
     /** Save app state into SharedPreferences */
@@ -576,7 +594,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         Log.d("FeedViewer", "Scheduling save of scroll pos");
         mLastSavedScrollPos = now;
-        Log.d("FeedViewer", "posting delayed scroll saving");
         mWebView.postDelayed(new Runnable() {
                 public void run() {
                     Log.d("FeedViewer", "*** After delay, saving scroll pos");
@@ -617,16 +634,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         int scrollpos = mSharedPreferences.getInt(key, 0);
         Log.d("FeedViewer", "read pos " + scrollpos + " for " + key);
         return scrollpos;
-    }
-
-    /* Calculate mWebView position in perecentage */
-    private int calculatePagePosition() {
-        if (!mPageIsLoaded)
-            return 0;
-
-        float contentHeight = mWebView.getContentHeight() * mWebView.getScale();
-        float currentY = mWebView.getScrollY();
-        return Math.round(100 * currentY / contentHeight);
     }
 
     // Figure out a sane URI that can be turned into a path
