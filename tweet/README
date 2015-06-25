@@ -1,0 +1,8 @@
+Tweet plays bird songs (or anything else) matching filenames on your
+filesystem.
+
+You can edit www/js/tweet.js to list the location or locations where
+you keep these bird songs, for instance, /storage/extSdCard/Tweet/
+Tweet does not need to write to this directory, so even on KitKat
+and above you should be able to put them nearly anywhere.
+

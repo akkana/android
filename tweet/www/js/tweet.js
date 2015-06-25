@@ -1,4 +1,5 @@
-  clipsloc = "file:///storage/extSdCard/Android/data/com.shallowsky.WebClient/Tweet/Birdsongs/";
+//  clipsloc = "file:///storage/extSdCard/Android/data/com.shallowsky.WebClient/Tweet/Birdsongs/";
+  clipsloc = "file:///storage/extSdCard/Tweet/";
 
   // It would be nice to read the bird list off the filesystem,
   // but we can't rely on Javascript being able to do that, so:

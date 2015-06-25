@@ -7,3 +7,22 @@ It requires the file plug-in to play the birdsong MP3 files
 on your SD card:
 cordova plugin add org.apache.cordova.file
 
+To build it, add platforms (I've only tested this on Android):
+cordova platforms add android
+
+Then build:
+cordova build
+
+To build a signed release, create a file called
+platforms/android/release-signing.properties, and put this in it:
+
+storeFile=/path/to/your-keystore.keystore
+storeType=jks
+keyAlias=some-key
+// if you don't want to enter the password at every build, use this:
+keyPassword=your-key-password
+storePassword=your-store-password
+
+Then build:
+cordova build android --release
+
