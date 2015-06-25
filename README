@@ -1,7 +1,12 @@
 A few small Android projects I've built mostly for my own use.
 
 FeedViewer: View RSS feeds created with Feedme.
+  Java, Ant build.
 
-WebClient: run web applications from an Android launcher,
-so I can write simple Android apps in HTML without needing Java
-or a large complex build environment and SDK.
+WebClient: Run web applications from an Android launcher,
+  so I can write simple Android apps in HTML without needing Java
+  or a large complex build environment and SDK.
+  Java, Ant build.
+
+Tweet: Play bird songs from a directory.
+  Built on PhoneGap/Cordova.

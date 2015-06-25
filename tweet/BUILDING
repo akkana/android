@@ -1,0 +1,9 @@
+Tweet is built on PhoneGap/Cordova.
+
+For a description of how I set up my environment, see:
+http://shallowsky.com/blog/programming/cross-platform-android-toolkits.html
+
+It requires the file plug-in to play the birdsong MP3 files
+on your SD card:
+cordova plugin add org.apache.cordova.file
+
