@@ -179,6 +179,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
                             return;
                         }
 
+                        Log.d("FeedViewer", "Page finished: " + url
+                              + " should be scrolled to " + scrollpos);
+
                         // Scroll a little above the remembered
                         // position -- else rounding errors may scroll
                         // us too far down to where the most recently
@@ -188,10 +191,23 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                (int)Math.round((mWebView.getContentHeight()
                                                 * mWebView.getScale()
                                                 * scrollpos - 1) / 100.0));
-                        Log.d("FeedViewer", "Page finished: " + url
-                              + " should be scrolled to " + scrollpos);
                     }
-                }, 300);
+                }, 200);
+
+                // Schedule a delayed save of wherever we're scrolling.
+                // Don't do this with maybeSaveScrollState()
+                // because we definitely want to make sure we
+                // save the URL, even if not the scroll state.
+                mWebView.postDelayed(new Runnable() {
+                    public void run() {
+                        Log.d("FeedViewer",
+                              "*** Delay after load: saving state");
+                        SharedPreferences.Editor editor
+                            = mSharedPreferences.edit();
+                        saveScrollPos(editor);
+                        editor.commit();
+                    }
+                }, 1200);
             }
 
             @Override
@@ -494,10 +510,16 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     // Eliminate any # named anchor positioning from a URL.
     private String remove_named_anchor(String url) {
-        int hash = url.indexOf('#');
-        if (hash <= 0)
+        try {
+            int hash = url.indexOf('#');
+            if (hash <= 0)
+                return url;
+            return url.substring(0, hash);
+        } catch (Exception e) {
+            Log.d("FeedViewer",
+                  "Exception in remove_named_anchor, url = " + url);
             return url;
-        return url.substring(0, hash);
+        }
     }
 
     /* Calculate mWebView position in perecentage */
@@ -542,9 +564,10 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             Log.d("FeedViewer", "Saving scroll pos " + scrollpos
                   + " for " + key);
             editor.putInt(key, scrollpos);
-            editor.putString("url", url);
             mLastSavedScrollPos = SystemClock.uptimeMillis();
         }
+        // But save the URL anyway, even if the scroll pos is zero.
+        editor.putString("url", url);
     }
 
     /** Save app state into SharedPreferences */
