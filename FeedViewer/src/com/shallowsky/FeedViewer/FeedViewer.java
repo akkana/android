@@ -411,6 +411,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     public void onPause() {
         super.onPause();
 
+        // Unfortunately this usually doesn't work. But doesn't hurt to try:
         saveStateInPreferences();
 
         unregisterMountListener();
