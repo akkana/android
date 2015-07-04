@@ -37,6 +37,7 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 
 import android.os.AsyncTask;
+import android.widget.Toast;
 
 import java.net.URL;
 import java.net.HttpURLConnection;
@@ -74,6 +75,15 @@ public class FeedFetcher {
     FetchFeedsTask mFetchTask = null;
     Boolean mFetchImages = true;
     String mSavedURLs;
+
+    // Ick ick ick! There's no way to pass multiple arguments to
+    // publishProgress() or to overload it in order to do an optional
+    // toast. So instead we use this class variable to signal that
+    // the next progress update should also be toasted.
+    // There must be a better way.
+    // XXX Maybe the better way is just to call runOnUiThread for the
+    // toasts rather than trusting publishProgress to manage threads.
+    int mToastLength = 0;
 
     public FeedFetcher(Context context, String serverurl, String localdir,
                        FeedProgress fp) {
@@ -262,7 +272,6 @@ public class FeedFetcher {
                         else
                             publishProgress(".");
                         if (subdir.startsWith("MANIFEST")) {
-                            publishProgress("feedme finished!");
                             feedmeRan = true;
                         }
                     }
@@ -274,6 +283,40 @@ public class FeedFetcher {
                         } catch (IOException e) {
                             return "Couldn't read MANIFEST: IOException";
                         }
+
+                        // Race condition: it can happen that we see
+                        // that the MANIFEST has been created but we
+                        // try to download it too quickly, before it's
+                        // been fully created. Wait 2 secs then try again.
+                        if (manifest.length() == 0) {
+                            Log.d("FeedFetcher",
+                                  "MANIFEST was zero length; will try again.");
+                            try {
+                                Thread.sleep(2000);
+                            } catch (InterruptedException e) {
+                                // Thread.sleep() requires that we catch this. 
+                                // But throwing this error clears the interrupt
+                                // bit, so in case we actually needed to
+                                // be interrupted:
+                                Thread.currentThread().interrupt();
+                            }
+
+                            try {
+                                manifest = downloadUrl(manifestURL);
+                            } catch (IOException e) {
+                                return "Couldn't re-read MANIFEST: IOException";
+                            }
+                        }
+
+                        if (manifest.length() == 0) {
+                            Log.d("FeedFetcher",
+                                  "MANIFEST was still zero length.");
+                            return "MANIFEST was zero length!";
+                        }
+
+                        // If we get here we have a manifest.
+                        mToastLength = Toast.LENGTH_SHORT;
+                        publishProgress("feedme ran");
 
                         // Delete the local saved-urls file, if any.
                         if (mSavedURLs != null) {
@@ -288,11 +331,6 @@ public class FeedFetcher {
                 }
             }
             Log.d("FeedFetcher", "Fetched manifest");
-
-            if (manifest.length() == 0) {
-                Log.d("FeedFetcher", "MANIFEST was zero length!");
-                return "MANIFEST was zero length!";
-            }
 
             Log.d("FeedFetcher", "\n=======================\nDownloading");
             String datedir = mLocalDir + "/" + todayStr + "/";
@@ -355,11 +393,21 @@ public class FeedFetcher {
                 }
             }
 
-            return "Finished with FeedFetcher";
+            mToastLength = Toast.LENGTH_LONG;
+            publishProgress("Fetched feeds");
+            return "Finished fetching feeds";
         }
 
+        /**
+         * Show progress in the log, in the dialog, and optionally
+         * as a toast of a given
+         */
         protected void onProgressUpdate(String... progress) {
             logProgress(progress[0]);
+            if (mToastLength > 0) {
+                Toast.makeText(mContext, progress[0], mToastLength).show();
+                mToastLength = 0;
+            }
         }
 
         // onPostExecute displays the return value of the AsyncTask.
@@ -393,9 +441,9 @@ public class FeedFetcher {
                 started = true;
         }
         return subdirs;
-}
+    }
 
-    public void logProgress(String s) {
+    private void logProgress(String s) {
         // Special case for dot: don't include a newline.
         if (s.equals("."))
             mFeedProgress.log(s);
