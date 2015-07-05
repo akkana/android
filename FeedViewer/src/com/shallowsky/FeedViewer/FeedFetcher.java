@@ -240,14 +240,7 @@ public class FeedFetcher {
                 Boolean feedmeRan = false;
                 Set<String> subdirSet = new TreeSet<String>();
                 while (true) {
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        // Thread.sleep() requires that we catch this.
-                        // But throwing this error clears the interrupt bit,
-                        // so in case we actually needed to be interrupted:
-                        Thread.currentThread().interrupt();
-                    }
+                    sleep(delay);
 
                     // AsyncTask has to check itself for cancellation.
                     // But this doesn't work: even after calling cancel
@@ -277,44 +270,41 @@ public class FeedFetcher {
                     }
 
                     if (feedmeRan) {
-                        // Feedme ran: get the manifest!
-                        try {
-                            manifest = downloadUrl(manifestURL);
-                        } catch (IOException e) {
-                            return "Couldn't read MANIFEST: IOException";
-                        }
-
-                        // Race condition: it can happen that we see
-                        // that the MANIFEST has been created but we
-                        // try to download it too quickly, before it's
-                        // been fully created. Wait 2 secs then try again.
-                        if (manifest.length() == 0) {
-                            Log.d("FeedFetcher",
-                                  "MANIFEST was zero length; will try again.");
-                            try {
-                                Thread.sleep(2000);
-                            } catch (InterruptedException e) {
-                                // Thread.sleep() requires that we catch this. 
-                                // But throwing this error clears the interrupt
-                                // bit, so in case we actually needed to
-                                // be interrupted:
-                                Thread.currentThread().interrupt();
-                            }
+                        // Feedme ran: get the manifest.
+                        // But just because we've seen the manifest
+                        // doesn't mean it's fully populated yet.
+                        // We sometimes see zero manifests -- which
+                        // means that we're probably getting partial
+                        // manifests at other times. To reduce the chances
+                        // of that, wait a few seconds before fetching,
+                        // and if it's still zero, then wait a few more
+                        // seconds and try again.
+                        // (It might be better to fetch the manifest twice;
+                        // but it can be relatively long and counts against
+                        // data charges.)
+                        IOException ioex = null;
+                        for (int i=0; i<2; ++i) {
+                            sleep(2000);
 
                             try {
                                 manifest = downloadUrl(manifestURL);
                             } catch (IOException e) {
-                                return "Couldn't re-read MANIFEST: IOException";
+                                ioex = e;
+                                Log.d("FeedFetcher",
+                                      "IO Exception reading MANIFEST");
+                                continue;
+                            }
+
+                            if (manifest.length() == 0) {
+                                Log.d("FeedFetcher",
+                                      "MANIFEST was zero length");
+                                continue;
                             }
                         }
+                        if (ioex != null || manifest.length() == 0)
+                            return "Couldn't read MANIFEST";
 
-                        if (manifest.length() == 0) {
-                            Log.d("FeedFetcher",
-                                  "MANIFEST was still zero length.");
-                            return "MANIFEST was zero length!";
-                        }
-
-                        // If we get here we have a manifest.
+                        // If we get here we have a nonzero manifest.
                         mToastLength = Toast.LENGTH_SHORT;
                         publishProgress("feedme ran");
 
@@ -424,6 +414,17 @@ public class FeedFetcher {
         protected void onCancelled(String message) {
             logProgress("FeedFetcher task cancelled: message: " + message);
             mFetchTask = null;
+        }
+    }
+
+    private void sleep(int millisecs) {
+        try {
+            Thread.sleep(millisecs);
+        } catch (InterruptedException e) {
+            // Thread.sleep() requires that we catch this. 
+            // But throwing this error clears the interrupt bit,
+            // so in case we actually needed to be interrupted:
+            Thread.currentThread().interrupt();
         }
     }
 
