@@ -144,19 +144,32 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 Log.d("FeedViewer", "Content height is "
                       + mWebView.getContentHeight());
 
-                // onPageFinished doesn't REALLY mean the page is finished.
-                // I'm not sure what it menas, maybe "got the URL and
-                // initiated page load". But there are lots of things
-                // you can't do yet, like getContentHeight() which will
-                // give entirely the wrong answer, so we have to do that
-                // from a postDelayed. How long? Who knows? 200msec
-                // definitely isn't enough for a long page.
-                // It turns out onPageFinished means the WebView has
-                // finished reading the bytes, not that it has done
-                // anything toward page parsing or layout.
-                // Some possible ideas:
-                // http://stackoverflow.com/questions/23093513/android-webview-getcontentheight-always-returns-0
-                // http://stackoverflow.com/questions/22878069/android-get-height-of-webview-content-once-rendered
+                /* onPageFinished doesn't REALLY mean the page is finished.
+                 * Apparently it means the WebView has read the bytes
+                 * and is ready to start parsing and laying out.
+                 * So things like getContentHeight don't work yet.
+                 * There apparently is no callback that will tell you when
+                 * layout is finished, so the only solution I've found is
+                 * to wait -- a LONG time (200msec isn't enough on many
+                 * pages; 800msec usually is) before scrolling. So the
+                 * user will see the delay and the scroll, a crap user
+                 * experience, but that's the Android toolkit.
+
+                 * Some ideas I tried that didn't work::
+                 * http: *stackoverflow.com/questions/23093513/android-webview-getcontentheight-always-returns-0
+                 * The onSizeChanged is only called initially, when the size
+                 * is still 0, then never called again. The PictureListener
+                 * doesn't even come close to compiling any more.
+                 * http: *stackoverflow.com/questions/22878069/android-get-height-of-webview-content-once-rendered
+                 * ViewTreeObserver gets called too early, right after
+                 * onSizeChanged, and getMeasuredHeight() is nonzero but small
+                 * (480 pixels on a 111020-pixel Slashdot page.
+                 */
+
+                // Millisecond delays:
+                final int WAIT_FOR_LAYOUT = 900;
+                final int WAIT_BEFORE_SAVING_PREFS = 5000;
+
                 mWebView.postDelayed(new Runnable() {
                     public void run() {
                         mPageIsLoaded = true;
@@ -224,7 +237,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // confusing to the user.
                         mWebView.scrollTo(0, pixelscroll);
                     }
-                }, 800);
+                }, WAIT_FOR_LAYOUT);
 
                 // Schedule a delayed save of wherever we're scrolling.
                 // Don't do this with maybeSaveScrollState()
@@ -241,7 +254,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         saveScrollPos(editor);
                         editor.commit();
                     }
-                }, 5000);
+                }, WAIT_BEFORE_SAVING_PREFS);
             }
 
             @Override
