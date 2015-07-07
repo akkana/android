@@ -14,9 +14,9 @@
       >
         <TextView android:id="@+id/feedFetcherText"
             android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
             android:text="TextView"
             android:gravity="bottom"
-            android:layout_height="fill_parent"
             android:layout_weight="2">
         </TextView>
   </ScrollView>
