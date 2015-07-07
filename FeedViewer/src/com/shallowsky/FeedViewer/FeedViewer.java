@@ -47,6 +47,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.ScrollView;
+import android.text.method.ScrollingMovementMethod;
 
 public class FeedViewer extends Activity implements OnGestureListener {
 
@@ -169,6 +170,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // However, we do want to record the new scroll pos.
                         // maybeSaveScrollState will set another delay.
                         if (url.indexOf('#') > 0) {
+                            Log.d("FeedViewer", "There's a named anchor");
                             maybeSaveScrollState();
                             return;
                         }
@@ -359,7 +361,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
         if (! onFeedsPage()) {
             try {
-                //showTextMessage("Remembered " + mLastUrl);
+                //Log.d("FeedViewer", "Loading remembered " + mLastUrl);
                 mWebView.loadUrl(mLastUrl);
                 mWebSettings.setDefaultFontSize(mFontSize);
             }
@@ -589,7 +591,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     /** Save the current scroll state (but not other preferences)
      *  only if it's been long enough since the last time we saved.
-     * If it's been less than 5 seconds since we last saved, don't
+     * If it's been less than N seconds since we last saved, don't
      * do anything. If it's been more than that, schedule a save
      * to happen after 1 sec (and don't reset the timer until that
      * save fires off).
@@ -616,11 +618,13 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             return;
         }
 
-        Log.d("FeedViewer", "Scheduling save of scroll pos");
+        Log.d("FeedViewer", "Scheduling save of scroll pos "
+              + calculatePagePosition());
         mLastSavedScrollPos = now;
         mWebView.postDelayed(new Runnable() {
                 public void run() {
-                    Log.d("FeedViewer", "*** After delay, saving scroll pos");
+                    Log.d("FeedViewer", "*** After delay, saving scroll pos"
+                          + calculatePagePosition());
                     SharedPreferences.Editor editor = mSharedPreferences.edit();
                     saveScrollPos(editor);
                     editor.commit();
@@ -1354,7 +1358,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
             mFeedFetcherText =
                 (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
-
+            mFeedFetcherText.setMovementMethod(new ScrollingMovementMethod());
 
             // Can't do these yet: the dialog hasn't been created yet.
             Button imgToggle =

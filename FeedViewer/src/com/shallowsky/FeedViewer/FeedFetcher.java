@@ -52,6 +52,9 @@ import android.content.Context;
 
 import android.util.Log;
 
+// Only temporary for testing:
+import android.os.Looper;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -262,6 +265,10 @@ public class FeedFetcher {
                             subdirSet.add(subdir);
                             publishProgress("  " + subdir);
                         }
+                        // Ideally it would be nice to show dots periodically,
+                        // to show something's still happening, but it's
+                        // not clear how to append to a textview without
+                        // a newline.
                         else
                             publishProgress(".");
                         if (subdir.startsWith("MANIFEST")) {
@@ -305,7 +312,7 @@ public class FeedFetcher {
                             return "Couldn't read MANIFEST";
 
                         // If we get here we have a nonzero manifest.
-                        mToastLength = Toast.LENGTH_SHORT;
+                        mToastLength = Toast.LENGTH_LONG;
                         publishProgress("feedme ran");
 
                         // Delete the local saved-urls file, if any.
@@ -389,11 +396,19 @@ public class FeedFetcher {
         }
 
         /**
-         * Show progress in the log, in the dialog, and optionally
-         * as a toast of a given
+         * Show progress in the log, in the dialog,
+         * and optionally as a toast of a given length.
+         * This is called on the UI thread from publishProgress().
          */
         protected void onProgressUpdate(String... progress) {
             logProgress(progress[0]);
+
+            // This is always supposed to be called on the UI thread,
+            // according to the AsyncTask docs.
+            // But we're getting some weird behaviors, so just in case:
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                throw new AssertionError("Not the main thread!");
+            }
             if (mToastLength > 0) {
                 Toast.makeText(mContext, progress[0], mToastLength).show();
                 mToastLength = 0;
@@ -447,7 +462,7 @@ public class FeedFetcher {
     private void logProgress(String s) {
         // Special case for dot: don't include a newline.
         if (s.equals("."))
-            mFeedProgress.log(s);
+            mFeedProgress.log(" . ");
         else
             mFeedProgress.log(s + "\n");
         Log.d("FeedFetcher", s);

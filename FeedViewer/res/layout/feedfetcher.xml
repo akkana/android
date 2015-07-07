@@ -4,7 +4,7 @@
               android:layout_height="match_parent"
               android:layout_width="match_parent"
               >
-    <ScrollView android:id="@+id/fetcherTextScroller"
+  <ScrollView android:id="@+id/fetcherTextScroller"
       android:layout_width="fill_parent" 
       android:layout_height="fill_parent" 
       android:layout_x="0px" 
