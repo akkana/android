@@ -1340,6 +1340,12 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // Pop up a dialog with a textview that we can modify later:
         if (mFeedFetcherDialog != null) {
             mFeedFetcherText.append("\n\nRe-showing the old dialog\n");
+
+            // Try to scroll to the bottom, though this doesn't always work,
+            // particularly during the actual downloading phase:
+            ScrollView scrollView = (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller);
+            if (scrollView != null)
+                scrollView.fullScroll(View.FOCUS_DOWN);
         }
         else {
             mFeedFetcherDialog = new Dialog(this);
