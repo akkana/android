@@ -133,14 +133,39 @@ public class FeedViewer extends Activity implements OnGestureListener {
              * Would be great if Android could give us callbacks
              * when things were REALLY finished loading or scrolling.
              */
+             /* onPageFinished gets called twice when starting up. Why?
+              * That's probably the reason for some of the page jumpiness
+              * we see.
+              */
             @Override
             public void onPageFinished(WebView webView, final String url) {
-                Log.d("FeedViewer", "onPageFinished " + url);
+                Log.d("FeedViewer", "\nonPageFinished "
+                      + SystemClock.uptimeMillis() + " " + url);
+                Log.d("FeedViewer", "Content height is "
+                      + mWebView.getContentHeight());
+
+                // onPageFinished doesn't REALLY mean the page is finished.
+                // I'm not sure what it menas, maybe "got the URL and
+                // initiated page load". But there are lots of things
+                // you can't do yet, like getContentHeight() which will
+                // give entirely the wrong answer, so we have to do that
+                // from a postDelayed. How long? Who knows? 200msec
+                // definitely isn't enough for a long page.
+                // It turns out onPageFinished means the WebView has
+                // finished reading the bytes, not that it has done
+                // anything toward page parsing or layout.
+                // Some possible ideas:
+                // http://stackoverflow.com/questions/23093513/android-webview-getcontentheight-always-returns-0
+                // http://stackoverflow.com/questions/22878069/android-get-height-of-webview-content-once-rendered
                 mWebView.postDelayed(new Runnable() {
                     public void run() {
                         mPageIsLoaded = true;
 
-                        Log.d("FeedViewer", "pageFinished postDelayed " + url);
+                        Log.d("FeedViewer", "pageFinished postDelayed "
+                              + SystemClock.uptimeMillis() + " " + url);
+                        Log.d("FeedViewer", "Content height is "
+                              + mWebView.getContentHeight());
+
                         /* Might need to comment out this next section.
                          * Sometimes it gets triggered wrongly,
                          * and this gets called when the page is scrolled
@@ -180,26 +205,33 @@ public class FeedViewer extends Activity implements OnGestureListener {
                             Log.d("FeedViewer", "Not scrolling, scrollpos = 0");
                             return;
                         }
-
+                        int pixelscroll =
+                            (int)Math.round((mWebView.getContentHeight()
+                                             * mWebView.getScale()
+                                             * scrollpos - 1) / 100.0);
                         Log.d("FeedViewer", "Page finished: " + url
-                              + " should be scrolled to " + scrollpos);
+                              + " trying to scroll to " + scrollpos
+                              + " -> " + pixelscroll
+                              + " = (" + mWebView.getContentHeight() + " * "
+                              + mWebView.getScale() + " * " + scrollpos
+                              + " - 1) / 100.0"
+                              );
 
                         // Scroll a little above the remembered
                         // position -- else rounding errors may scroll
                         // us too far down to where the most recently
                         // read story isn't visible, which is
                         // confusing to the user.
-                        mWebView.scrollTo(0,
-                               (int)Math.round((mWebView.getContentHeight()
-                                                * mWebView.getScale()
-                                                * scrollpos - 1) / 100.0));
+                        mWebView.scrollTo(0, pixelscroll);
                     }
-                }, 200);
+                }, 800);
 
                 // Schedule a delayed save of wherever we're scrolling.
                 // Don't do this with maybeSaveScrollState()
                 // because we definitely want to make sure we
                 // save the URL, even if not the scroll state.
+                // Give it a nice long delay, guaranteed to be much longer
+                // than the delay we had to use to set the scroll positions.
                 mWebView.postDelayed(new Runnable() {
                     public void run() {
                         Log.d("FeedViewer",
@@ -209,7 +241,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         saveScrollPos(editor);
                         editor.commit();
                     }
-                }, 1200);
+                }, 5000);
             }
 
             @Override
@@ -553,12 +585,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // we will end up with url being the ToC index page,
         // but scrollpos being the position on the sub-page we just came from.
         Log.d("FeedViewer", "saveScrollPos 1: url = " + mWebView.getUrl()
-              + ", scrollY = " + mWebView.getScrollY());
+              + ", scrollY = " + mWebView.getScrollY()
+              + " -> " + calculatePagePosition());
         int scrollpos = calculatePagePosition();
         String url = remove_named_anchor(mWebView.getUrl());
         String key = url_to_scrollpos_key(url);
         Log.d("FeedViewer", "saveScrollPos 2: url = " + mWebView.getUrl()
-              + ", scrollY = " + mWebView.getScrollY());
+              + ", scrollY = " + mWebView.getScrollY()
+              + " -> " + calculatePagePosition());
         // Sometimes we spuriously get called when page position is 0,
         // maybe because the page isn't fully loaded. If so, don't save.
         if (scrollpos <= 0)
@@ -598,7 +632,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      */
     private void maybeSaveScrollState() {
         final long HOWOFTEN = 5000;  // Don't save more often than this
-        final long SCROLL_SAVE_DELAY = 1500;  // delay saves by this much
+        final long SCROLL_SAVE_DELAY = 5000;  // delay saves by this much
 
         long now = SystemClock.uptimeMillis();
 
@@ -606,29 +640,27 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // initialization, there might be random scrolling going on,
         // and it would be good to delay saving anything new for quite
         // a while to avoid overwriting the scroll position read from prefs.
-        if (mLastSavedScrollPos <= 0) {
-            Log.d("FeedViewer",
-                  "First time in maybeSaveScrollState, delaying 10 seconds");
-            mLastSavedScrollPos = now + 10000;
+        Log.d("FeedViewer", "In MSSS, content height is "
+              + mWebView.getContentHeight());
+        if (mLastSavedScrollPos > 0 && now < mLastSavedScrollPos) {
+            Log.d("FeedViewer", "Not saving scroll pos "
+                  + calculatePagePosition() + " -- too early");
             return;
         }
+        Log.d("FeedViewer",
+              "maybeSaveScrollState: scheduling save  of pos " +
+              calculatePagePosition()
+              + " in " + SCROLL_SAVE_DELAY/1000 + " sec");
+        mLastSavedScrollPos = now + SCROLL_SAVE_DELAY;
 
-        if (now < mLastSavedScrollPos + HOWOFTEN) {
-            Log.d("FeedViewer", "Not saving scroll pos -- too early");
-            return;
-        }
-
-        Log.d("FeedViewer", "Scheduling save of scroll pos "
-              + calculatePagePosition());
-        mLastSavedScrollPos = now;
         mWebView.postDelayed(new Runnable() {
-                public void run() {
-                    Log.d("FeedViewer", "*** After delay, saving scroll pos"
-                          + calculatePagePosition());
-                    SharedPreferences.Editor editor = mSharedPreferences.edit();
-                    saveScrollPos(editor);
-                    editor.commit();
-                }
+            public void run() {
+                Log.d("FeedViewer", "*** After delay, saving scroll pos"
+                      + calculatePagePosition());
+                SharedPreferences.Editor editor = mSharedPreferences.edit();
+                saveScrollPos(editor);
+                editor.commit();
+            }
         }, SCROLL_SAVE_DELAY);
     }
 
