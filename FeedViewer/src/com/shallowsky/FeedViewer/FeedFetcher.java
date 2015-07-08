@@ -88,6 +88,8 @@ public class FeedFetcher {
     // toasts rather than trusting publishProgress to manage threads.
     int mToastLength = 0;
 
+    Boolean isStopped = false;
+
     public FeedFetcher(Context context, String serverurl, String localdir,
                        FeedProgress fp) {
         mContext = context;
@@ -115,6 +117,9 @@ public class FeedFetcher {
         // cleans up after itself, since I don't know how to
         // find out when it finishes.
         mFetchTask = null;
+
+        // And send a signal to any downloaders:
+        isStopped = true;
     }
 
     // Control whether images are fetched
@@ -550,8 +555,11 @@ public class FeedFetcher {
             // we need to know how may bytes were read
             // to write them to the output stream
             int len = 0;
-            while ((len = is.read(buffer)) != -1)
+            while ((len = is.read(buffer)) != -1) {
                 fos.write(buffer, 0, len);
+                if (isStopped)
+                    break;
+            }
         
             // Makes sure that the InputStream is closed after the app is
             // finished using it.
