@@ -111,6 +111,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        Log.d("FeedViewer", "onCreate");
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
         detector = new GestureDetector(this, this);
@@ -366,6 +368,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
         // Read preferences in onResume instead of here,
         // and load the page there too.
         //readPreferences();
+
+        initialPageLoad();
     } // end onCreate
 
     /********  APP LIFECYCLE FUNCTIONS *******/
@@ -382,6 +386,12 @@ public class FeedViewer extends Activity implements OnGestureListener {
         Log.d("FeedViewer", "onResume");
         super.onResume();
 
+        //initialPageLoad();
+
+        registerMountListener();
+    }
+
+    public void initialPageLoad() {
         // Prevent any saving of the scroll position for quite a while:
         // we're going to get a ton of events and and scroll positions
         // and many of them will be wrong.
@@ -397,8 +407,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
             showTextMessage("SD card not mounted");
             mWebView.setVisibility(View.GONE);
         }
-
-        registerMountListener();
 
         // Now do all the initialization stuff, now that we've read prefs
         // and have our SD card loaded.
