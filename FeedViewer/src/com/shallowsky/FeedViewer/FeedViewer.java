@@ -90,9 +90,13 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     WebSettings mWebSettings; // Settings for the WebView, e.g. font size.
 
+    // The FeedFetcher and its dialog
     FeedFetcher mFeedFetcher = null;
     Dialog mFeedFetcherDialog = null;
     TextView mFeedFetcherText = null;
+
+    // To hide content while we're delaying waiting to scroll
+    Dialog mHideContentDialog = null;
 
     // Params that can be saved
     int mFontSize = 18;
@@ -141,6 +145,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
               */
             @Override
             public void onPageFinished(WebView webView, final String url) {
+                hideContent();
+
                 Log.d("FeedViewer", "\nonPageFinished "
                       + SystemClock.uptimeMillis() + " " + url);
                 Log.d("FeedViewer", "Content height is "
@@ -198,6 +204,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                                                      * 100.
                                                  / mWebView.getContentHeight()
                                                  / mWebView.getScale()));
+                            unhideContent();
                             return;
                         }
                          */
@@ -212,12 +219,14 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         if (url.indexOf('#') > 0) {
                             Log.d("FeedViewer", "There's a named anchor");
                             maybeSaveScrollState();
+                            unhideContent();
                             return;
                         }
 
                         int scrollpos = getScrollFromPreferences(url);
                         if (scrollpos == 0) {
                             Log.d("FeedViewer", "Not scrolling, scrollpos = 0");
+                            unhideContent();
                             return;
                         }
                         int pixelscroll =
@@ -238,6 +247,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // read story isn't visible, which is
                         // confusing to the user.
                         mWebView.scrollTo(0, pixelscroll);
+                        unhideContent();
                     }
                 }, WAIT_FOR_LAYOUT);
 
@@ -550,6 +560,19 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     public void showTextMessage(String msg) {
         mDocNameView.setText(msg);
         Log.d("FeedViewer", msg);
+    }
+
+    public void hideContent() {
+        if (mHideContentDialog == null) {
+            mHideContentDialog = new Dialog(this,
+                          android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+            //mHideContentDialog.setContentView(R.layout.hideContent);
+        }
+        mHideContentDialog.show();
+    }
+
+    public void unhideContent() {
+        mHideContentDialog.hide();
     }
 
     /** Load the webpage into mWebView. */
@@ -1413,7 +1436,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                 (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
             mFeedFetcherText.setMovementMethod(new ScrollingMovementMethod());
 
-            // Can't do these yet: the dialog hasn't been created yet.
             Button imgToggle =
                 (Button)mFeedFetcherDialog.findViewById(R.id.ffImgToggle);
             imgToggle.setOnClickListener(new OnClickListener() {
