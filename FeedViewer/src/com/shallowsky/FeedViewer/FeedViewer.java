@@ -145,7 +145,17 @@ public class FeedViewer extends Activity implements OnGestureListener {
               */
             @Override
             public void onPageFinished(WebView webView, final String url) {
-                hideContent();
+                // Hide content while all the annoying scrolling happens.
+                // But not if we're loading a named anchor in the same page,
+                // because scrolling to another part of the same page is fast.
+                int hash = url.indexOf('#');
+                if (hash <= 0)
+                    hideContent();
+                else if (! url.substring(0, hash).equals(
+                                            mLastUrl.substring(0, hash)))
+                        hideContent();
+
+                mLastUrl = url;
 
                 Log.d("FeedViewer", "\nonPageFinished "
                       + SystemClock.uptimeMillis() + " " + url);
@@ -290,7 +300,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
                         // If it's file: then we're moving between
                         // internal pages. Go ahead and go to the
                         // link, saving settings.
-                        mLastUrl = url;
+
+                        // Don't save mLastUrl here; wait until onPageFinished.
+                        //mLastUrl = url;
                         //showTextMessage("will try to load " + url);
                         //saveSettings();
                         return false;
