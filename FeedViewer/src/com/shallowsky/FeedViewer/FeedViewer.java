@@ -625,7 +625,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     // The url passed in here should already have had named anchors stripped.
     private String url_to_scrollpos_key(String url) {
-        if (onFeedsPage() || nullURL(url))
+        if (onFeedsPage(url) || nullURL(url))
             return "feeds_scrollpos";
         String urlkey = url;
         if (urlkey.startsWith("file://")) {
@@ -769,15 +769,19 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                 || url.isEmpty()|| url.equals("about:blank"));
     }
 
-    boolean onFeedsPage() {
-        if (nullURL(mLastUrl))
+    boolean onFeedsPage(String url) {
+        if (nullURL(url))
             //Log.d("FeedViewer", "On feeds page because mLastUrl is null");
             return true;
-        if (mLastUrl.startsWith("file://") &&
-            (mLastUrl.endsWith("/feeds") ||
-             mLastUrl.endsWith("com.shallowsky.FeedMe")))
+        if (url.startsWith("file://") &&
+            (url.endsWith("/feeds") ||
+             url.endsWith("com.shallowsky.FeedViewer")))
             return true;
         return false;
+    }
+
+    boolean onFeedsPage() {
+        return onFeedsPage(mLastUrl);
     }
 
     /*
