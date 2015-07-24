@@ -1,12 +1,12 @@
 package com.shallowsky.FeedViewer;
 
 /*
- * FeedViewer: an Android HTML reader optimized for reading short
- * RSS feeds downloaded from the web, then deleting them after reading.
+ * FeedViewer: an Android HTML reader optimized for reading RSS
+ * feeds downloaded from the web, then deleting them after reading.
  *
- * Copyright 2010-2012 by Akkana Peck <akkana@shallowsky.com>
- * This software is licensed under the terms of the GPLv2 or, at your
- * option, any later GPL version. Share and enjoy!
+ * Copyright 2010-2014 by Akkana Peck <akkana@shallowsky.com>
+ * This software is licensed under the terms of the GPLv2 or,
+ * at your option, any later GPL version. Share and enjoy!
  */
 
 import java.io.File;
@@ -31,6 +31,7 @@ import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.net.Uri;
 import android.view.GestureDetector;
 import android.view.GestureDetector.OnGestureListener;
 import android.view.KeyEvent;
@@ -186,7 +187,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
                 // Millisecond delays:
                 final int WAIT_FOR_LAYOUT = 900;
-                final int WAIT_BEFORE_SAVING_PREFS = 5000;
+                final int WAIT_BEFORE_SAVING_PREFS = 2500;
 
                 mWebView.postDelayed(new Runnable() {
                     public void run() {
@@ -321,8 +322,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
             public void onReceivedError(WebView webview, int errorCode,
                     String description, String failingUrl) {
                 if (failingUrl.startsWith("file://")) {
-                    loadFeedList();
                     showTextMessage("Couldn't load " + failingUrl);
+                    mWebView.loadUrl(mLastUrl);
                 }
             }
         });
@@ -635,25 +636,32 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         return urlkey + "_scrollpos";
     }
 
+    private void saveScrollPos() {
+        SharedPreferences.Editor editor = mSharedPreferences.edit();
+        saveScrollPos(editor);
+        editor.commit();
+    }
+
     private void saveScrollPos(SharedPreferences.Editor editor) {
-        // XXX Sometimes, when going back from a third-level page to its ToC,
-        // if we call calculatePagePosition after setting url and key,
-        // we will end up with url being the ToC index page,
-        // but scrollpos being the position on the sub-page we just came from.
-        Log.d("FeedViewer", "saveScrollPos 1: url = " + mWebView.getUrl()
-              + ", scrollY = " + mWebView.getScrollY()
-              + " -> " + calculatePagePosition());
+        String url1 = remove_named_anchor(mWebView.getUrl());
         int scrollpos = calculatePagePosition();
         String url = remove_named_anchor(mWebView.getUrl());
+        // Race condition: Make sure the URL hasn't changed in the
+        // time it took to get the page position.
+        if (!url.equals(url1)) {
+            showTextMessage("Race condition, URL changed");
+            return;
+        }
         String key = url_to_scrollpos_key(url);
-        Log.d("FeedViewer", "saveScrollPos 2: url = " + mWebView.getUrl()
-              + ", scrollY = " + mWebView.getScrollY()
-              + " -> " + calculatePagePosition());
         // Sometimes we spuriously get called when page position is 0,
         // maybe because the page isn't fully loaded. If so, don't save.
+        // However, this also keeps us from saving state when the user
+        // deliberately scrolls back to the beginning of the page.
+        // Maybe we've solved the problem elsewhere now?
+        /*
         if (scrollpos <= 0)
             Log.d("FeedViewer", "Not saving zero scrollpos for " + key);
-        else {
+        else */{
             Log.d("FeedViewer", "Saving scroll pos " + scrollpos
                   + " for " + key);
             editor.putInt(key, scrollpos);
@@ -713,9 +721,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             public void run() {
                 Log.d("FeedViewer", "*** After delay, saving scroll pos"
                       + calculatePagePosition());
-                SharedPreferences.Editor editor = mSharedPreferences.edit();
-                saveScrollPos(editor);
-                editor.commit();
+                saveScrollPos();
             }
         }, SCROLL_SAVE_DELAY);
     }
@@ -808,12 +814,15 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                 saveUrlForLater(url);
                             }
                         })
-                .setPositiveButton("Visit",
+                .setPositiveButton("Browse",
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog,
                                     int id) {
-                                showTextMessage("Visiting " + url);
-                                mWebView.loadUrl(url);
+                                showTextMessage("Browsing " + url);
+                                Intent browserIntent
+                                    = new Intent(Intent.ACTION_VIEW, 
+                                                 Uri.parse(url));
+                                startActivity(browserIntent);
                             }
                         })
                 .setNegativeButton("Cancel",
