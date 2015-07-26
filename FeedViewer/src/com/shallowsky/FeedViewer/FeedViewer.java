@@ -383,7 +383,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
         // the scroll listener:
         mWebView.setOnScrollChangedCallback(new ObservableWebView.OnScrollChangedCallback() {
             public void onScroll(int l, int t) {
-                Log.d("FeedViewer", "Saving state because we scrolled");
                 maybeSaveScrollState();
             }
         });
@@ -643,31 +642,25 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     private void saveScrollPos(SharedPreferences.Editor editor) {
-        String url1 = remove_named_anchor(mWebView.getUrl());
+        String url1 = mWebView.getUrl();
         int scrollpos = calculatePagePosition();
-        String url = remove_named_anchor(mWebView.getUrl());
+        String url = mWebView.getUrl();
         // Race condition: Make sure the URL hasn't changed in the
         // time it took to get the page position.
-        if (!url.equals(url1)) {
-            showTextMessage("Race condition, URL changed");
+        if (url == null || url1 == null || !url.equals(url1)) {
+            showTextMessage("Race condition, URL changed!");
             return;
         }
+        Log.d("FeedViewer", "Two equal urls were " + url1 + " and " + url
+              + ", scrollpos = " + scrollpos);
+        url = remove_named_anchor(url);
         String key = url_to_scrollpos_key(url);
-        // Sometimes we spuriously get called when page position is 0,
-        // maybe because the page isn't fully loaded. If so, don't save.
-        // However, this also keeps us from saving state when the user
-        // deliberately scrolls back to the beginning of the page.
-        // Maybe we've solved the problem elsewhere now?
-        /*
-        if (scrollpos <= 0)
-            Log.d("FeedViewer", "Not saving zero scrollpos for " + key);
-        else */{
-            Log.d("FeedViewer", "Saving scroll pos " + scrollpos
-                  + " for " + key);
-            editor.putInt(key, scrollpos);
-            mLastSavedScrollPos = SystemClock.uptimeMillis();
-        }
-        // But save the URL anyway, even if the scroll pos is zero.
+
+        Log.d("FeedViewer", "Saving scroll pos " + scrollpos
+              + " for " + key);
+        editor.putInt(key, scrollpos);
+        mLastSavedScrollPos = SystemClock.uptimeMillis();
+
         editor.putString("url", url);
     }
 
@@ -704,11 +697,9 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // initialization, there might be random scrolling going on,
         // and it would be good to delay saving anything new for quite
         // a while to avoid overwriting the scroll position read from prefs.
-        Log.d("FeedViewer", "In MSSS, content height is "
-              + mWebView.getContentHeight());
         if (mLastSavedScrollPos > 0 && now < mLastSavedScrollPos) {
-            Log.d("FeedViewer", "Not saving scroll pos "
-                  + calculatePagePosition() + " -- too early");
+            //Log.d("FeedViewer", "Not saving scroll pos "
+            //      + calculatePagePosition() + " -- too early");
             return;
         }
         Log.d("FeedViewer",
@@ -719,7 +710,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         mWebView.postDelayed(new Runnable() {
             public void run() {
-                Log.d("FeedViewer", "*** After delay, saving scroll pos"
+                Log.d("FeedViewer", "*** After delay, saving scroll pos "
                       + calculatePagePosition());
                 saveScrollPos();
             }
@@ -1055,7 +1046,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      * Recursively delete a directory.
      */
     boolean deleteDir(File dir) {
-        //mDocNameView.setText("deleteDir " + dir.getAbsolutePath());
         if (dir.isDirectory()) {
             String[] children = dir.list();
             for (int i=0; i<children.length; i++) {
@@ -1133,6 +1123,10 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog,
                                         int id) {
+                                    Log.d("FeedViewer",
+                                          "deleting "
+                                            + feeddir.getAbsolutePath());
+
                                     deleteDir(feeddir);
 
                                     // If this was the last feed and
