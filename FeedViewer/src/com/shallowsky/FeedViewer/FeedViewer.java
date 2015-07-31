@@ -50,6 +50,10 @@ import android.widget.TextView;
 import android.widget.ScrollView;
 import android.text.method.ScrollingMovementMethod;
 
+import android.os.Build;
+import android.graphics.Picture;
+import android.webkit.WebView.PictureListener;
+
 public class FeedViewer extends Activity implements OnGestureListener {
 
     private GestureDetector detector;
@@ -87,7 +91,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     // Delays: variables used to hold time and lock actions.
     long mScrollLock = 0;          // delays for scrolling, avoiding longpress
-    long mLastSavedScrollPos = 0;  // delay saving scroll pos after scrolling
+
+    // Delay saving scroll pos after scrolling.
+    long mLastSavedScrollPos = 0;
 
     WebSettings mWebSettings; // Settings for the WebView, e.g. font size.
 
@@ -146,6 +152,22 @@ public class FeedViewer extends Activity implements OnGestureListener {
               */
             @Override
             public void onPageFinished(WebView webView, final String url) {
+                PictureListener pictureListener = new PictureListener() {
+                    @Override
+                    @Deprecated
+                    public void onNewPicture(WebView view,
+                                             Picture picture) {
+                        Log.d("FeedViewer", "=========== Picture changed! "
+                              + SystemClock.uptimeMillis()
+                              + ", URL = " + mWebView.getUrl()
+                              + ", content height = "
+                              + mWebView.getContentHeight());
+                        view.setPictureListener(null);
+                        scrollToRememberedPosition();
+                    }
+                };
+                mWebView.setPictureListener(pictureListener);
+
                 // Hide content while all the annoying scrolling happens.
                 // But not if we're loading a named anchor in the same page,
                 // because scrolling to another part of the same page is fast.
@@ -185,80 +207,21 @@ public class FeedViewer extends Activity implements OnGestureListener {
                  * (480 pixels on a 111020-pixel Slashdot page.
                  */
 
+                /* ***
                 // Millisecond delays:
                 final int WAIT_FOR_LAYOUT = 900;
                 final int WAIT_BEFORE_SAVING_PREFS = 2500;
 
+                 * Comment out both these delayed functions.
+                 * Try to do them from PictureListener.
                 mWebView.postDelayed(new Runnable() {
                     public void run() {
-                        mPageIsLoaded = true;
-
                         Log.d("FeedViewer", "pageFinished postDelayed "
-                              + SystemClock.uptimeMillis() + " " + url);
-                        Log.d("FeedViewer", "Content height is "
+                              + SystemClock.uptimeMillis() + " " + url
+                              + ", content height = "
                               + mWebView.getContentHeight());
-
-                        /* Might need to comment out this next section.
-                         * Sometimes it gets triggered wrongly,
-                         * and this gets called when the page is scrolled
-                         * to a position other than where it really was last.
-                         * I have no idea why that happens.
-                         *
-                         * But it means that our saved page positions need
-                         * to be fairly good since we can't ever rely on
-                         * the WebView's own memory of page position. Sigh.
-                         *
-                        if (mWebView.getScrollY() != 0) {
-                            Log.d("FeedViewer",
-                                  "Not scrolling, page is already scrolled to "
-                                  + (int)Math.round(mWebView.getScrollY()
-                                                     * 100.
-                                                 / mWebView.getContentHeight()
-                                                 / mWebView.getScale()));
-                            unhideContent();
-                            return;
-                        }
-                         */
-
-                        // If we went to a named anchor (with #),
-                        // we don't want to scroll the page.
-                        // This also implies we shouldn't save named anchors
-                        // as part of a saved URL since it will prevent us
-                        // from scrolling when we go back to that page.
-                        // However, we do want to record the new scroll pos.
-                        // maybeSaveScrollState will set another delay.
-                        if (url.indexOf('#') > 0) {
-                            Log.d("FeedViewer", "There's a named anchor");
-                            maybeSaveScrollState();
-                            unhideContent();
-                            return;
-                        }
-
-                        int scrollpos = getScrollFromPreferences(url);
-                        if (scrollpos == 0) {
-                            Log.d("FeedViewer", "Not scrolling, scrollpos = 0");
-                            unhideContent();
-                            return;
-                        }
-                        int pixelscroll =
-                            (int)Math.round((mWebView.getContentHeight()
-                                             * mWebView.getScale()
-                                             * scrollpos - 1) / 100.0);
-                        Log.d("FeedViewer", "Page finished: " + url
-                              + " trying to scroll to " + scrollpos
-                              + " -> " + pixelscroll
-                              + " = (" + mWebView.getContentHeight() + " * "
-                              + mWebView.getScale() + " * " + scrollpos
-                              + " - 1) / 100.0"
-                              );
-
-                        // Scroll a little above the remembered
-                        // position -- else rounding errors may scroll
-                        // us too far down to where the most recently
-                        // read story isn't visible, which is
-                        // confusing to the user.
-                        mWebView.scrollTo(0, pixelscroll);
-                        unhideContent();
+                        mPageIsLoaded = true;
+                        scrollToRememberedPosition();
                     }
                 }, WAIT_FOR_LAYOUT);
 
@@ -272,12 +235,10 @@ public class FeedViewer extends Activity implements OnGestureListener {
                     public void run() {
                         Log.d("FeedViewer",
                               "*** Delay after load: saving state");
-                        SharedPreferences.Editor editor
-                            = mSharedPreferences.edit();
-                        saveScrollPos(editor);
-                        editor.commit();
+                        saveScrollPos();
                     }
                 }, WAIT_BEFORE_SAVING_PREFS);
+                */
             }
 
             @Override
@@ -293,7 +254,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
                 // Otherwise, we'll try to load something.
                 // First, save our position on the current page.
-                saveStateInPreferences();
+                //saveStateInPreferences();
+                saveScrollPos();
 
                 try {
                     URI uri = new URI(url);
@@ -359,7 +321,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mFeedlistButton = (Button) findViewById(R.id.feedListButton);
         mFeedlistButton.setOnClickListener(new OnClickListener() {
             public void onClick(View v) {
-                saveStateInPreferences();
+                //saveStateInPreferences();
                 loadFeedList();
             }
         });
@@ -474,6 +436,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // being called first; but some people say it happens, and
         // clearly we're sometimes getting killed without prefs being
         // saved, so try saving them again here:
+        saveScrollPos();
         saveStateInPreferences();
 
         super.onDestroy();  // to avoid mysterious SuperNotCalledException
@@ -489,6 +452,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         super.onPause();
 
         // Unfortunately this usually doesn't work. But doesn't hurt to try:
+        saveScrollPos();
         saveStateInPreferences();
 
         unregisterMountListener();
@@ -615,8 +579,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
     /* Calculate mWebView position in perecentage */
     private int calculatePagePosition() {
-        if (!mPageIsLoaded)
-            return 0;
+        //if (!mPageIsLoaded)
+        //    return 0;
 
         float contentHeight = mWebView.getContentHeight() * mWebView.getScale();
         float currentY = mWebView.getScrollY();
@@ -651,6 +615,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             showTextMessage("Race condition, URL changed!");
             return;
         }
+        // When this fails, url1 and url are about about:blank
         Log.d("FeedViewer", "Two equal urls were " + url1 + " and " + url
               + ", scrollpos = " + scrollpos);
         url = remove_named_anchor(url);
@@ -673,7 +638,11 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         editor.putInt("font_size", mFontSize);
         editor.putInt("brightness", mBrightness);
 
-        saveScrollPos(editor);
+        //saveScrollPos(editor);
+        // saveStateInPreferences() is called from all over, and in
+        // some of those cases it might not be appropriate to save
+        // the scroll position directly.
+        //maybeSaveScrollState();
 
         editor.commit();
 
@@ -686,10 +655,12 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      * do anything. If it's been more than that, schedule a save
      * to happen after 1 sec (and don't reset the timer until that
      * save fires off).
+     * Currently called ONLY from onScroll().
      */
     private void maybeSaveScrollState() {
+
         final long HOWOFTEN = 5000;  // Don't save more often than this
-        final long SCROLL_SAVE_DELAY = 5000;  // delay saves by this much
+        final long SCROLL_SAVE_DELAY = 3500;  // delay saves by this much
 
         long now = SystemClock.uptimeMillis();
 
@@ -710,8 +681,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         mWebView.postDelayed(new Runnable() {
             public void run() {
-                Log.d("FeedViewer", "*** After delay, saving scroll pos "
-                      + calculatePagePosition());
+                Log.d("FeedViewer", "*** After delay, saving scroll pos");
                 saveScrollPos();
             }
         }, SCROLL_SAVE_DELAY);
@@ -747,6 +717,56 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         int scrollpos = mSharedPreferences.getInt(key, 0);
         Log.d("FeedViewer", "read pos " + scrollpos + " for " + key);
         return scrollpos;
+    }
+
+    /* After loading a new page, see if we've been here before
+     * and scroll to the last known scroll position.
+     */
+    private void scrollToRememberedPosition() {
+        Log.d("FeedViewer", "scrollToRememberedPosition: Content height is "
+              + mWebView.getContentHeight());
+
+        String url = mWebView.getUrl();
+
+        // If we went to a named anchor (with #), don't scroll the page.
+        // This also implies we shouldn't save named anchors
+        // as part of a saved URL since it will prevent us
+        // from scrolling when we go back to that page.
+        if (url.indexOf('#') > 0) {
+            Log.d("FeedViewer", "There's a named anchor");
+            unhideContent();
+            return;
+        }
+
+        int scrollpos = getScrollFromPreferences(url);
+        if (scrollpos == 0) {
+            Log.d("FeedViewer", "Not scrolling, saved scrollpos = 0");
+            unhideContent();
+            return;
+        }
+        int pixelscroll =
+            (int)Math.round((mWebView.getContentHeight()
+                             * mWebView.getScale()
+                             * scrollpos - 1) / 100.0);
+        Log.d("FeedViewer", "Trying to scroll to " + scrollpos
+              + " -> " + pixelscroll
+              + " = (" + mWebView.getContentHeight() + " * "
+              + mWebView.getScale() + " * " + scrollpos
+              + " - 1) / 100.0"
+              );
+
+        // This type of scroll apparently takes a long time;
+        // it will trigger maybeSaveScrollState and a delayed save,
+        // but the delay isn't long enough. So make sure we don't
+        // save for quite a while after loading a page and scrolling:
+        mLastSavedScrollPos = SystemClock.uptimeMillis() + 4000;
+
+        // Scroll a little above the remembered position -- 
+        // else rounding errors may scroll us too far down,
+        // to where the most recently read line isn't visible,
+        // which is confusing to the user.
+        mWebView.scrollTo(0, pixelscroll);
+        unhideContent();
     }
 
     // Figure out a sane URI that can be turned into a path
@@ -847,8 +867,10 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      * Directory structure looks like: [baseDir]/dayname/feedname/index.html
      */
     public void loadFeedList() {
-        // Save scroll position in the current document:
-        saveStateInPreferences();
+        // Save scroll position in the current document, without a delay,
+        // if we have a current document:
+        if (mLastUrl != null)
+            saveScrollPos();
 
         String resultspage = "<html>\n<head>\n";
         resultspage += "<title>Feeds</title>\n";
@@ -903,7 +925,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                         }
                     }
                 }
-                //else resultspage += "Day " + files[day] + " not a directory.<br>\n";
             }
         }
         resultspage += "<p>End of feed list</br>\n";
@@ -916,16 +937,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         //updateBatteryLevel();
         mLastUrl = null;
            // don't count on this null -- may get overridden. Use onFeedsPage().
-
-        //saveSettings();
     }
 
     /*
      * Go back to the previous page, or re-generate the feeds list if needed.
      */
     public void goBack() {
-        // Save scroll position in the current document:
-        saveStateInPreferences();
+        // Save scroll position in the current document, without a delay:
+        saveScrollPos();
 
         try {
             if (onFeedsPage()) {  // already on a generated page, probably feeds
@@ -989,7 +1008,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     public void goForward() {
-        saveStateInPreferences();
+        saveScrollPos();
         mWebView.goForward();
         mWebSettings.setDefaultFontSize(mFontSize);
         //updateBatteryLevel();
@@ -1002,8 +1021,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         if (onFeedsPage())
             return;
 
-        // Save scroll position in the current document:
-        saveStateInPreferences();
+        // Save scroll position in the current document, without delay:
+        saveScrollPos();
 
         // In theory, we're already in the right place, so just load relative
         // index.html -- but nope, that doesn't work.
@@ -1020,8 +1039,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                             + mWebView.getUrl());
         }
         mWebSettings.setDefaultFontSize(mFontSize);
-
-        //saveSettings();  // Hopefully this will happen on page load.
     }
 
     public void setBrightness(int value) {
@@ -1037,9 +1054,12 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // This is supposed to turn off the annoying button lights: see
         // http://developer.android.com/reference/android/view/WindowManager.LayoutParams.html#buttonBrightness
         // Alas, it doesn't actually do anything.
-        lp.buttonBrightness = LayoutParams.BRIGHTNESS_OVERRIDE_OFF;
+        //lp.buttonBrightness = LayoutParams.BRIGHTNESS_OVERRIDE_OFF;
 
         getWindow().setAttributes(lp);
+
+        // Save the new brightness:
+        saveStateInPreferences();
     }
 
     /*
@@ -1051,7 +1071,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             for (int i=0; i<children.length; i++) {
                 boolean success = deleteDir(new File(dir, children[i]));
                 if (!success) {
-                    //mDocNameView.setText("Oops, couldn't delete " + new File(dir, children[i]).getAbsolutePath());
                     mDocNameView.setText("Couldn't delete");
                     return false;
                 }
@@ -1064,15 +1083,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     // Clean up any scroll preferences for files/directories we've deleted.
     // That includes not just what we just immediately deleted, but anything
     // that was deleted previously and somehow didn't get its pref removed.
-    private void cleanUpScrollPrefs(String dirstr) {
-        Log.d("FeedViewer", "==========\nTrying to delete prefs matching " + dirstr);
+    private void cleanUpScrollPrefs() {
+        Log.d("FeedViewer", "Trying to delete old scroll prefs");
         SharedPreferences.Editor editor = mSharedPreferences.edit();
         Map<String,?> allprefs = mSharedPreferences.getAll();
         for (Map.Entry<String,?> entry : allprefs.entrySet()) {
             String key = entry.getKey();
             if (key.endsWith("_scrollpos") && !key.startsWith("feeds_")) {
                 String path = key.substring(0, key.length() - 10);
-                //Log.d("FeedViewer", "Checking whether " + path + "still exists");
                 File file = new File(path);
                 if(! file.exists()) {
                     editor.remove(key);
@@ -1082,12 +1100,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         }
         editor.commit();
 
-        /*
-        Log.d("FeedViewer", "==========\nNow complete pref list looks like:");
-        allprefs = mSharedPreferences.getAll();
-        for (Map.Entry<String,?> entry2 : allprefs.entrySet())
-            Log.d("FeedViewer", entry2.getKey());
-         */
+        // printPreferences();
     }
 
     /*
@@ -1101,9 +1114,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             /*
              * We're reading a file in feeds/dayname/feedname/filename.html
              * or possibly the directory itself, feeds/dayname/feedname/
-             * and what we want to delete is the directory feeds/dayname/feedname
+             * and what we want to delete is the dir feeds/dayname/feedname
              * along with everything inside it.
-             * So we need the
              */
             final File feeddir;
             final File curfile = new File(getPathForURI());
@@ -1122,7 +1134,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                     .setPositiveButton("Delete",
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog,
-                                        int id) {
+                                                    int id) {
                                     Log.d("FeedViewer",
                                           "deleting "
                                             + feeddir.getAbsolutePath());
@@ -1156,13 +1168,21 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                         }
                                     }
 
-                                    // If we deleted anything, then make sure
-                                    // make sure we're not going to remember
-                                    // scroll position from the deleted page.
-                                    // deletePrefsFor(feeddir.getAbsolutePath());
-                                    cleanUpScrollPrefs(feeddir.getAbsolutePath());
-
+                                    // Load the feeds list before cleaning
+                                    // up scroll prefs.
+                                    // But the first thing loadFeedList does
+                                    // is save position on the previous page,
+                                    // which we can't do since we just deleted
+                                    // the previous page and will end up
+                                    // saving the position from the previous
+                                    // page for the feeds list URL.
+                                    // So encode that into mLastUrl:
+                                    mLastUrl = null;
                                     loadFeedList();
+
+                                    // Don't retain scroll position
+                                    // for deleted pages.
+                                    cleanUpScrollPrefs();
                                 }
                             })
                     .setNegativeButton("Cancel",
@@ -1202,10 +1222,12 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         case R.id.bigger:
             mWebSettings.setDefaultFontSize(++mFontSize);
             showTextMessage("bigger:" + mFontSize);
+            saveStateInPreferences();
             return true;
         case R.id.smaller:
             mWebSettings.setDefaultFontSize(--mFontSize);
             showTextMessage("smaller:" + mFontSize);
+            saveStateInPreferences();
             return true;
         case R.id.feedfetcher:
             showFeedFetcherProgress();
