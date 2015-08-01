@@ -95,6 +95,9 @@ public class FeedViewer extends Activity implements OnGestureListener {
     // Delay saving scroll pos after scrolling.
     long mLastSavedScrollPos = 0;
 
+    // Block saving of scroll position during operations like load and delete.
+    boolean mBlockSavingScrollPos = false;
+
     WebSettings mWebSettings; // Settings for the WebView, e.g. font size.
 
     // The FeedFetcher and its dialog
@@ -152,6 +155,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
               */
             @Override
             public void onPageFinished(WebView webView, final String url) {
+                mBlockSavingScrollPos = true;
                 PictureListener pictureListener = new PictureListener() {
                     @Override
                     @Deprecated
@@ -163,7 +167,19 @@ public class FeedViewer extends Activity implements OnGestureListener {
                               + ", content height = "
                               + mWebView.getContentHeight());
                         view.setPictureListener(null);
-                        scrollToRememberedPosition();
+
+                        //scrollToRememberedPosition();
+                        // Sadly, even in onNewPicture you can't depend
+                        // on scrollTo() working right away.
+                        // We still need a delay.
+                        // WebView, what a total piece of crap!
+                        mWebView.postDelayed(new Runnable() {
+                            public void run() {
+                                Log.d("FeedViewer",
+                          "*** After delay, scrolling to remembered position");
+                                scrollToRememberedPosition();
+                            }
+                        }, 300);
                     }
                 };
                 mWebView.setPictureListener(pictureListener);
@@ -606,6 +622,11 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     private void saveScrollPos(SharedPreferences.Editor editor) {
+        if (mBlockSavingScrollPos) {
+            Log.d("FeedViewer", "Not saving scroll pos: blocked");
+            return;
+        }
+
         String url1 = mWebView.getUrl();
         int scrollpos = calculatePagePosition();
         String url = mWebView.getUrl();
@@ -683,6 +704,9 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             public void run() {
                 Log.d("FeedViewer", "*** After delay, saving scroll pos");
                 saveScrollPos();
+                // In case we were blocked from saving that time,
+                // let's not block the next one.
+                mBlockSavingScrollPos = false;
             }
         }, SCROLL_SAVE_DELAY);
     }
@@ -749,7 +773,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                              * mWebView.getScale()
                              * scrollpos - 1) / 100.0);
         Log.d("FeedViewer", "Trying to scroll to " + scrollpos
-              + " -> " + pixelscroll
+              + "% -> " + pixelscroll
               + " = (" + mWebView.getContentHeight() + " * "
               + mWebView.getScale() + " * " + scrollpos
               + " - 1) / 100.0"
@@ -766,6 +790,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // to where the most recently read line isn't visible,
         // which is confusing to the user.
         mWebView.scrollTo(0, pixelscroll);
+
         unhideContent();
     }
 
@@ -867,6 +892,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      * Directory structure looks like: [baseDir]/dayname/feedname/index.html
      */
     public void loadFeedList() {
+        Log.d("FeedViewer", "Loading feed list");
+
         // Save scroll position in the current document, without a delay,
         // if we have a current document:
         if (mLastUrl != null)
@@ -937,6 +964,33 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         //updateBatteryLevel();
         mLastUrl = null;
            // don't count on this null -- may get overridden. Use onFeedsPage().
+    }
+
+    /*
+     * Go to the index page for the current feed.
+     */
+    public void tableOfContents() {
+        if (onFeedsPage())
+            return;
+
+        // Save scroll position in the current document, without delay:
+        saveScrollPos();
+
+        // In theory, we're already in the right place, so just load relative
+        // index.html -- but nope, that doesn't work.
+        try {
+            URI uri = new URI(mWebView.getUrl());
+            File feeddir = new File(uri.getPath()).getParentFile();
+            mWebView.loadUrl("file://" + feeddir.getAbsolutePath()
+                    + File.separator + "index.html");
+        } catch (URISyntaxException e) {
+            showTextMessage("ToC: URI Syntax: URL was "
+                            + mWebView.getUrl());
+        } catch (NullPointerException e) {
+            showTextMessage("NullPointerException: URL was "
+                            + mWebView.getUrl());
+        }
+        mWebSettings.setDefaultFontSize(mFontSize);
     }
 
     /*
@@ -1012,33 +1066,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         mWebView.goForward();
         mWebSettings.setDefaultFontSize(mFontSize);
         //updateBatteryLevel();
-   }
-
-    /*
-     * Go to the index page for the current feed.
-     */
-    public void tableOfContents() {
-        if (onFeedsPage())
-            return;
-
-        // Save scroll position in the current document, without delay:
-        saveScrollPos();
-
-        // In theory, we're already in the right place, so just load relative
-        // index.html -- but nope, that doesn't work.
-        try {
-            URI uri = new URI(mWebView.getUrl());
-            File feeddir = new File(uri.getPath()).getParentFile();
-            mWebView.loadUrl("file://" + feeddir.getAbsolutePath()
-                    + File.separator + "index.html");
-        } catch (URISyntaxException e) {
-            showTextMessage("ToC: URI Syntax: URL was "
-                            + mWebView.getUrl());
-        } catch (NullPointerException e) {
-            showTextMessage("NullPointerException: URL was "
-                            + mWebView.getUrl());
-        }
-        mWebSettings.setDefaultFontSize(mFontSize);
     }
 
     public void setBrightness(int value) {
@@ -1135,6 +1162,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog,
                                                     int id) {
+                                    mBlockSavingScrollPos = true;
                                     Log.d("FeedViewer",
                                           "deleting "
                                             + feeddir.getAbsolutePath());
@@ -1177,7 +1205,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                     // saving the position from the previous
                                     // page for the feeds list URL.
                                     // So encode that into mLastUrl:
-                                    mLastUrl = null;
+                                    // XXX This didn't help.
+                                    // mLastUrl = null;
                                     loadFeedList();
 
                                     // Don't retain scroll position
