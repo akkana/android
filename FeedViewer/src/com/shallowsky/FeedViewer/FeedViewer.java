@@ -105,9 +105,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
     Dialog mFeedFetcherDialog = null;
     TextView mFeedFetcherText = null;
 
-    // To hide content while we're delaying waiting to scroll
-    Dialog mHideContentDialog = null;
-
     // Params that can be saved
     int mFontSize = 18;
     int mBrightness = 0;
@@ -555,16 +552,11 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     public void hideContent() {
-        if (mHideContentDialog == null) {
-            mHideContentDialog = new Dialog(this,
-                          android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-            //mHideContentDialog.setContentView(R.layout.hideContent);
-        }
-        mHideContentDialog.show();
+        findViewById(R.id.webview).setVisibility(View.INVISIBLE);
     }
 
     public void unhideContent() {
-        mHideContentDialog.hide();
+        findViewById(R.id.webview).setVisibility(View.VISIBLE);
     }
 
     /** Load the webpage into mWebView. */
