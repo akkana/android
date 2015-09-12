@@ -53,7 +53,7 @@ import android.content.Context;
 import android.util.Log;
 
 // Only temporary for testing:
-import android.os.Looper;
+//import android.os.Looper;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -408,12 +408,14 @@ public class FeedFetcher {
         protected void onProgressUpdate(String... progress) {
             logProgress(progress[0]);
 
+            /*
             // This is always supposed to be called on the UI thread,
             // according to the AsyncTask docs.
             // But we're getting some weird behaviors, so just in case:
             if (Looper.myLooper() != Looper.getMainLooper()) {
                 throw new AssertionError("Not the main thread!");
             }
+            */
             if (mToastLength > 0) {
                 Toast.makeText(mContext, progress[0], mToastLength).show();
                 mToastLength = 0;
