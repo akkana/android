@@ -22,7 +22,8 @@ package com.shallowsky.FeedViewer;
  * meanwhile showing progress by fetching baseurl and parsing it
  * to show which directories have appeared.
  *
- * Finally, when MANIFEST has appeared, we download all files specified there.
+ * Finally, when MANIFEST has appeared and stopped changing,
+ * we download all files specified there.
  */
 
 import java.io.IOException;
@@ -33,6 +34,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 
@@ -198,6 +200,46 @@ public class FeedFetcher {
         return true;
     }
 
+    // Fetch MANIFEST and check to make sure it's complete.
+    // Throws IOException if the manifest isn't there or is incomplete.
+    String fetchManifest(String manifestURL) throws IOException {
+        String manifest = downloadUrl(manifestURL);
+
+        if (manifest.length() == 0) {
+            Log.d("FeedFetcher",
+                  "MANIFEST was zero length");
+            throw new IOException("MANIFEST was empty");
+        }
+
+        // We sometimes get zero or partial manifests.
+        // So to make sure we've read the whole thing,
+        // look for the special string ".EOF."
+        // as the last line.
+        Log.d("FeedFetcher", "Checking whether we got the full MANIFEST");
+        String eofstr = ".EOF.";
+        int eoflen = eofstr.length();
+        int manlen = manifest.length() - 1;
+        // Strip newlines off the end.
+        // These should always be just \n,
+        // but why count on it?
+        while (manlen > 0 &&
+               (manifest.charAt(manlen) == '\n' ||
+                manifest.charAt(manlen) == '\r'))
+            manlen -= 1;
+        // manlen should now point to the last non-newline.
+        Log.d("FeedFetcher", "total " + manlen + ", eoflen = " + eoflen);
+        String endman = manifest.substring(manlen-eoflen+1, manlen+1);
+        if (! endman.equals(eofstr)) {
+            Log.d("FeedFetcher",
+                  "Partial MANIFEST of length " + manlen);
+            Log.d("FeedFetcher", "end string was " + endman);
+            throw new IOException("Partial MANIFEST");
+        }
+        Log.d("FeedFetcher", "End of MANIFEST was fine");
+
+        return manifest;
+    }
+
     // Most of FeedFetcher runs as an AsyncTask,
     // comuunicating back to the parent thread about its progress.
     // Within the AsyncTask, we'll just wait for feeds.
@@ -223,7 +265,7 @@ public class FeedFetcher {
             // Has feedme already run? Check whether the manifest
             // is already there.
             try {
-                manifest = downloadUrl(manifestURL);
+                manifest = fetchManifest(manifestURL);
                 publishProgress("Feedme already ran.\n");
             } catch (IOException e) {
                 manifest = null;
@@ -285,31 +327,18 @@ public class FeedFetcher {
                         // Feedme ran: get the manifest.
                         // But just because we've seen the manifest
                         // doesn't mean it's fully populated yet.
-                        // We sometimes see zero manifests -- which
-                        // means that we're probably getting partial
-                        // manifests at other times. To reduce the chances
-                        // of that, wait a few seconds before fetching,
-                        // and if it's still zero, then wait a few more
-                        // seconds and try again.
-                        // (It might be better to fetch the manifest twice;
-                        // but it can be relatively long and counts against
-                        // data charges.)
+                        // Loop until it's really there, or we've
+                        // waited too long for it.
                         IOException ioex = null;
-                        for (int i=0; i<2; ++i) {
-                            sleep(2000);
+                        for (int i=0; i<10; ++i) {
+                            sleep(3000);
 
                             try {
-                                manifest = downloadUrl(manifestURL);
+                                manifest = fetchManifest(manifestURL);
                             } catch (IOException e) {
                                 ioex = e;
                                 Log.d("FeedFetcher",
-                                      "IO Exception reading MANIFEST");
-                                continue;
-                            }
-
-                            if (manifest.length() == 0) {
-                                Log.d("FeedFetcher",
-                                      "MANIFEST was zero length");
+                                      "No MANIFEST yet");
                                 continue;
                             }
                         }
