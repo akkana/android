@@ -335,10 +335,15 @@ public class FeedFetcher {
 
                             try {
                                 manifest = fetchManifest(manifestURL);
+                                if (manifest.length() > 0) {
+                                    Log.d("FeedFetcher", "Got MANIFEST");
+                                    break;
+                                }
+                                Log.d("FeedFetcher", "MANIFEST is zero-length");
+                                continue;
                             } catch (IOException e) {
                                 ioex = e;
-                                Log.d("FeedFetcher",
-                                      "No MANIFEST yet");
+                                Log.d("FeedFetcher", "No MANIFEST yet");
                                 continue;
                             }
                         }
