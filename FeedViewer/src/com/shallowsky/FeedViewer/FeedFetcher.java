@@ -303,7 +303,8 @@ public class FeedFetcher {
                     try {
                         output = downloadUrl(feeddir);
                     } catch (IOException e) {
-                        publishProgress("Couldn't read dirs: IOException");
+                        publishProgress("Couldn't read dirs: IOException on "
+                                        + feeddir);
                         continue;
                     }
                     List<String> subdirs = HTMLDirToList(output);
@@ -315,7 +316,7 @@ public class FeedFetcher {
                         // Ideally it would be nice to show dots periodically,
                         // to show something's still happening, but it's
                         // not clear how to append to a textview without
-                        // a newline.
+                        // a newline and still see the update.
                         else
                             publishProgress(".");
                         if (subdir.startsWith("MANIFEST")) {
@@ -477,7 +478,7 @@ public class FeedFetcher {
         try {
             Thread.sleep(millisecs);
         } catch (InterruptedException e) {
-            // Thread.sleep() requires that we catch this. 
+            // Thread.sleep() requires that we catch this.
             // But throwing this error clears the interrupt bit,
             // so in case we actually needed to be interrupted:
             Thread.currentThread().interrupt();
@@ -530,7 +531,7 @@ public class FeedFetcher {
     private String downloadUrl(String urlstr) throws IOException {
         Log.d("FeedFetcher", "downloadUrl " + urlstr);
         InputStream is = null;
-        
+
         try {
             URL url = new URL(urlstr);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
@@ -550,13 +551,13 @@ public class FeedFetcher {
             // Convert the InputStream into a string
             String contentAsString = readIt(is);
             return contentAsString;
-        
+
             // Makes sure that the InputStream is closed after the app is
             // finished using it.
         } finally {
             if (is != null) {
                 is.close();
-            } 
+            }
         }
     }
 
@@ -571,7 +572,7 @@ public class FeedFetcher {
 
         int bufferSize = 1024;
         byte[] buffer = new byte[bufferSize];
-        
+
         try {
             URL url = new URL(urlstr);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();

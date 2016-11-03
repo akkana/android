@@ -11,10 +11,13 @@ package com.shallowsky.FeedViewer;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -69,22 +72,14 @@ public class FeedViewer extends Activity implements OnGestureListener {
     TextView mDocNameView;
     TextView mBatteryLevel;
 
-    // XXX This needs to be revisited, obviously,
-    // to allow the option of non external SD card too.
-    String mWritableDir = "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer";
+    // KitKat and later doesn't allow writing except in a directory
+    // named according to the Java class:
+    String mWritableDir = "/Android/data/com.shallowsky.FeedViewer";
+    String mFeedDir = null;
 
-    // /sdcard and getExternalStorageDirectory() aren't actually the SD card;
-    // the sdcard is /sdcard/sdcard or /mnt/sdcard/external_storage,
-    // or, in KitKat, /mnt/extSdCard which has no relation to
-    // getExternalStorageDirectory.
+    // But then in marshmallow, maybe it does.
     String mStorage = Environment.getExternalStorageDirectory().getPath();
-    String mMainBasePath = null;
-    String[] mBasePaths = {
-        mStorage + File.separator + "sdcard" + File.separator + "feeds",
-        mStorage + File.separator + "external_sd" + File.separator + "feeds",
-        mWritableDir,
-        mStorage + File.separator + "feeds",
-    };
+    ArrayList<String> mBasePaths = new ArrayList<String>();
 
     float mScreenWidth;
     float mScreenHeight;
@@ -119,6 +114,146 @@ public class FeedViewer extends Activity implements OnGestureListener {
 
     private SharedPreferences mSharedPreferences;
 
+    /** Android access to storage is such a PITA!
+     * In Marshmallow, there is NO WAY to get the path where the
+     * SD card is mounted.
+     * http://stackoverflow.com/questions/36766016/how-to-get-sd-card-path-in-android6-0-programmatically
+     * has a method that it claims works using later SDKs (haven't tried yet)
+     * plus a method that loops over the output of the mount command
+     * parsing the output. But it turns out that doesn't work either:
+     * the mount command doesn't actually return anything that points
+     * to a *writable* version of the SD card.
+     * Poking around in adb shell, I discovered there was a writable
+     * Android/data hierarchy at /storage/NNNN-NNNN (which will be
+     * different for every card, of course). So this function looks
+     * there for anything that has an Android/data directory in it.
+     */
+    public static ArrayList<String> getExternalMounts() {
+        ArrayList<String> out = new ArrayList<String>();
+
+        File storage = new File("/storage");
+        // Loop over days, in reverse order, most recent first:
+        File[] subdirs = storage.listFiles();
+        for (int i=0; i < subdirs.length; ++i) {
+            String dataname = subdirs[i] + File.separator + "Android/data";
+            //Log.d("FeedViewer", "Checking for data dir: " + dataname);
+            File datadir = new File(dataname);
+            if (datadir.exists() && datadir.isDirectory()) {
+                out.add(subdirs[i].getPath());
+                //Log.d("FeedViewer", "Found one! " + subdirs[i].getPath());
+            }
+        }
+        return out;
+    }
+
+    public static ArrayList<String> getExternalMounts2() {
+        ArrayList<String> out = new ArrayList<String>();
+        //final HashSet<String> out = new HashSet<String>();
+        String reg = "(?i).*vold.*(vfat|ntfs|exfat|fat32|ext3|ext4).*rw.*";
+        String s = "";
+        try {
+            final Process process = new ProcessBuilder().command("mount")
+                .redirectErrorStream(true).start();
+            process.waitFor();
+            final InputStream is = process.getInputStream();
+            final byte[] buffer = new byte[1024];
+            while (is.read(buffer) != -1) {
+                s = s + new String(buffer);
+            }
+            is.close();
+        } catch (final Exception e) {
+            e.printStackTrace();
+        }
+
+        // parse output
+        final String[] lines = s.split("\n");
+        for (String line : lines) {
+            if (!line.toLowerCase().contains("asec")) {
+                if (line.matches(reg)) {
+                    String[] parts = line.split(" ");
+                    for (String part : parts) {
+                        if (part.startsWith("/"))
+                            if (!part.toLowerCase().contains("vold"))
+                                out.add(part);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /*
+    public String[] getExternalStorageDirectories() {
+
+        List<String> results = new ArrayList<String>();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) { //Method 1 for KitKat & above
+            File[] externalDirs = getExternalFilesDirs(null);
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                for (File file : externalDirs) {
+                    String path = file.getPath().split("/Android")[0];
+                    if (Environment.isExternalStorageRemovable(file)) {
+                        results.add(path);
+                    }
+                }
+            } else if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                for (File file : externalDirs) {
+                    String path = file.getPath().split("/Android")[0];
+                    if (Environment.MEDIA_MOUNTED.equals(EnvironmentCompat.getStorageState(file))) {
+                        results.add(path);
+                    }
+                }
+            }
+        }
+
+        if(results.isEmpty()) { //Method 2 for all versions
+            // better variation of: http://stackoverflow.com/a/40123073/5002496
+            String output = "";
+            try {
+                final Process process = new ProcessBuilder().command("mount | grep /dev/block/vold")
+                .redirectErrorStream(true).start();
+                process.waitFor();
+                final InputStream is = process.getInputStream();
+                final byte[] buffer = new byte[1024];
+                while (is.read(buffer) != -1) {
+                    output = output + new String(buffer);
+                }
+                is.close();
+            } catch (final Exception e) {
+                e.printStackTrace();
+            }
+            if(!output.trim().isEmpty()) {
+                String devicePoints[] = output.split("\n");
+                for(String voldPoint: devicePoints) {
+                    results.add(voldPoint.split(" ")[2]);
+                }
+            }
+        }
+
+        //Below few lines is to remove paths which may not be external memory card, like OTG (feel free to comment them out)
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            for (int i = 0; i < results.size(); i++) {
+                if (!results.get(i).toLowerCase().matches(".*[0-9a-f]{4}[-][0-9a-f]{4}")) {
+                    Log.d(LOG_TAG, results.get(i) + " might not be extSDcard");
+                    results.remove(i--);
+                }
+            }
+        } else {
+            for (int i = 0; i < results.size(); i++) {
+                if (!results.get(i).toLowerCase().contains("ext") && !results.get(i).toLowerCase().contains("sdcard")) {
+                    Log.d(LOG_TAG, results.get(i)+" might not be extSDcard");
+                    results.remove(i--);
+                }
+            }
+        }
+
+        String[] storageDirectories = new String[results.size()];
+        for(int i=0; i<results.size(); ++i) storageDirectories[i] = results.get(i);
+
+        return storageDirectories;
+    }
+    */
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -132,6 +267,29 @@ public class FeedViewer extends Activity implements OnGestureListener {
         mWebSettings = mWebView.getSettings();
         mWebSettings.setJavaScriptEnabled(false);
         mFontSize = mWebSettings.getDefaultFontSize();
+
+        /* Initialize the PITA list of possible data directories */
+        ArrayList<String> extMounts = getExternalMounts();
+
+        for (int i = 0; i < extMounts.size(); ++i) {
+            mBasePaths.add(extMounts.get(i) + File.separator + mWritableDir);
+            Log.d("FeedViewer", "ext mount "
+                  + extMounts.get(i) + File.separator + mWritableDir);
+        }
+
+        // In KitKat, /sdcard and getExternalStorageDirectory()
+        // aren't actually the SD card; the sdcard is /sdcard/sdcard
+        // or /mnt/sdcard/external_storage,
+        mBasePaths.add("/mnt/extSdCard" + mWritableDir);
+
+        Log.d("FeedViewer", "EXTERNAL STORAGE: " + mStorage);
+        mBasePaths.add(mStorage + File.separator + mWritableDir);
+
+        // These are for Gingerbread and Froyo:
+        mBasePaths.add(mStorage + File.separator + "sdcard" + File.separator + "feeds");
+        mBasePaths.add(mStorage + File.separator + "external_sd" + File.separator + "feeds");
+        mBasePaths.add(mStorage + File.separator + "feeds");
+        /* End data directory initialization */
 
         mWebView.setWebViewClient(new WebViewClient() {
             /**
@@ -865,7 +1023,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     public void saveUrlForLater(String url) {
-        String savedUrlPath = mMainBasePath + File.separator + "saved-urls";
+        String savedUrlPath = mFeedDir + File.separator + "saved-urls";
         try {
             FileOutputStream fos;
             fos = new FileOutputStream(new File(savedUrlPath), true);  // append
@@ -876,6 +1034,15 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         } catch (Exception e) {
             showTextMessage("Couldn't save URL to " + savedUrlPath);
         }
+    }
+
+    /*
+     * Java has no basename utility.
+     */
+    public String basename(File f) {
+        String path = f.getPath();
+        int sep = path.lastIndexOf(File.separator);
+        return path.substring(sep + 1);
     }
 
     /*
@@ -896,15 +1063,15 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         // Loop over base dirs, in main storage and on the SD card to
         // add stylesheets. stylesheet needs absolute URLs for style
-        for (int base = 0; base < mBasePaths.length; ++base) {
+        for (int base = 0; base < mBasePaths.size(); ++base) {
             resultspage += "<link rel=\"stylesheet\" type=\"text/css\" title=\"Feeds\" href=\"file://"
-                + mBasePaths[base] + File.separator + "feeds.css\"/>\n";
+                + mBasePaths.get(base) + File.separator + "feeds.css\"/>\n";
         }
         resultspage += "</head>\n<body>";
 
         // Loop over the basedirs again to find story dirs to show:
-        for (int base = 0; base < mBasePaths.length; ++base) {
-            File basedir = new File(mBasePaths[base]);
+        for (int base = 0; base < mBasePaths.size(); ++base) {
+            File basedir = new File(mBasePaths.get(base));
             if (!basedir.isDirectory()) {
                 //resultspage += basedir.getPath() + " not a directory.<br>\n";
                 continue;
@@ -914,7 +1081,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             Arrays.sort(daydirs);
             for (int day = daydirs.length-1; day >= 0; --day) {
                 if (daydirs[day].isDirectory()) {
-                    resultspage += daydirs[day] + ":<br>\n";
+                    resultspage += basename(daydirs[day]) + ":<br>\n";
                     // Loop over feeds for that day
                     File[] feeds = daydirs[day].listFiles();
                     Arrays.sort(feeds);
@@ -924,13 +1091,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                                       + File.separator
                                                       + "index.html");
                             if (indexfile.canRead()) {
-                                resultspage += "<div class=\"index\"><a href='" + indexfile.toURI()
-                                        + "'>" + daydirs[day].getName() + " "
-                                        + feeds[feed].getName() + "</a></div>\n";
-                                // mMainBasePath will be the first of
+                                resultspage += "<div class=\"index\"><a href='"
+                                    + indexfile.toURI()
+                                    + "'>" + daydirs[day].getName() + " "
+                                    + feeds[feed].getName() + "</a></div>\n";
+                                // mFeedDir will be the first of
                                 // mBasePaths that actually has files in it.
-                                if (mMainBasePath == null)
-                                    mMainBasePath = basedir.getPath();
+                                if (mFeedDir == null)
+                                    mFeedDir = basedir.getPath();
                             }
                             else {
                                 // If we erroneously don't get an
@@ -939,7 +1107,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                 // way to read or delete it. So show
                                 // something:
                                 resultspage += daydirs[day].getName() + " "
-                                    + feeds[feed].getName() + "</a> (no index!)<br>\n";
+                                    + feeds[feed].getName()
+                                    + "</a> (no index!)<br>\n";
                             }
                         }
                     }
@@ -948,7 +1117,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         }
         resultspage += "<p>End of feed list</br>\n";
 
-        mWebView.loadDataWithBaseURL("file://" + mMainBasePath, resultspage,
+        mWebView.loadDataWithBaseURL("file://" + mFeedDir, resultspage,
                                      "text/html","utf-8", null);
 
         // Keep the font size the way the user asked:
@@ -1520,7 +1689,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         if (mFeedFetcher == null) {
             mFeedFetcherText.append("Creating a new Feed Fetcher\n");
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
-                                           mWritableDir,
+                                           mFeedDir,
                                            new FeedProgress(mFeedFetcherText,
                                                             (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
             if (! mFeedFetcher.fetchFeeds())
