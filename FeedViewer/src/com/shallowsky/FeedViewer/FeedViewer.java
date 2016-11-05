@@ -1081,7 +1081,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             Arrays.sort(daydirs);
             for (int day = daydirs.length-1; day >= 0; --day) {
                 if (daydirs[day].isDirectory()) {
-                    resultspage += basename(daydirs[day]) + ":<br>\n";
+                    Bool showedHeader = False;
                     // Loop over feeds for that day
                     File[] feeds = daydirs[day].listFiles();
                     Arrays.sort(feeds);
@@ -1091,6 +1091,13 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                                       + File.separator
                                                       + "index.html");
                             if (indexfile.canRead()) {
+                                // If there's any real content, show a
+                                // header for the directory.
+                                if (! showedHeader) {
+                                    resultspage += basename(daydirs[day])
+                                        + ":<br>\n";
+                                    showedHeader = True;
+                                }
                                 resultspage += "<div class=\"index\"><a href='"
                                     + indexfile.toURI()
                                     + "'>" + daydirs[day].getName() + " "
