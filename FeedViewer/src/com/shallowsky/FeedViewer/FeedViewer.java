@@ -182,78 +182,6 @@ public class FeedViewer extends Activity implements OnGestureListener {
         return out;
     }
 
-    /*
-    public String[] getExternalStorageDirectories() {
-
-        List<String> results = new ArrayList<String>();
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) { //Method 1 for KitKat & above
-            File[] externalDirs = getExternalFilesDirs(null);
-            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                for (File file : externalDirs) {
-                    String path = file.getPath().split("/Android")[0];
-                    if (Environment.isExternalStorageRemovable(file)) {
-                        results.add(path);
-                    }
-                }
-            } else if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                for (File file : externalDirs) {
-                    String path = file.getPath().split("/Android")[0];
-                    if (Environment.MEDIA_MOUNTED.equals(EnvironmentCompat.getStorageState(file))) {
-                        results.add(path);
-                    }
-                }
-            }
-        }
-
-        if(results.isEmpty()) { //Method 2 for all versions
-            // better variation of: http://stackoverflow.com/a/40123073/5002496
-            String output = "";
-            try {
-                final Process process = new ProcessBuilder().command("mount | grep /dev/block/vold")
-                .redirectErrorStream(true).start();
-                process.waitFor();
-                final InputStream is = process.getInputStream();
-                final byte[] buffer = new byte[1024];
-                while (is.read(buffer) != -1) {
-                    output = output + new String(buffer);
-                }
-                is.close();
-            } catch (final Exception e) {
-                e.printStackTrace();
-            }
-            if(!output.trim().isEmpty()) {
-                String devicePoints[] = output.split("\n");
-                for(String voldPoint: devicePoints) {
-                    results.add(voldPoint.split(" ")[2]);
-                }
-            }
-        }
-
-        //Below few lines is to remove paths which may not be external memory card, like OTG (feel free to comment them out)
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            for (int i = 0; i < results.size(); i++) {
-                if (!results.get(i).toLowerCase().matches(".*[0-9a-f]{4}[-][0-9a-f]{4}")) {
-                    Log.d(LOG_TAG, results.get(i) + " might not be extSDcard");
-                    results.remove(i--);
-                }
-            }
-        } else {
-            for (int i = 0; i < results.size(); i++) {
-                if (!results.get(i).toLowerCase().contains("ext") && !results.get(i).toLowerCase().contains("sdcard")) {
-                    Log.d(LOG_TAG, results.get(i)+" might not be extSDcard");
-                    results.remove(i--);
-                }
-            }
-        }
-
-        String[] storageDirectories = new String[results.size()];
-        for(int i=0; i<results.size(); ++i) storageDirectories[i] = results.get(i);
-
-        return storageDirectories;
-    }
-    */
-
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -935,7 +863,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         // save for quite a while after loading a page and scrolling:
         mLastSavedScrollPos = SystemClock.uptimeMillis() + 4000;
 
-        // Scroll a little above the remembered position -- 
+        // Scroll a little above the remembered position --
         // else rounding errors may scroll us too far down,
         // to where the most recently read line isn't visible,
         // which is confusing to the user.
@@ -1006,7 +934,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                     int id) {
                                 showTextMessage("Browsing " + url);
                                 Intent browserIntent
-                                    = new Intent(Intent.ACTION_VIEW, 
+                                    = new Intent(Intent.ACTION_VIEW,
                                                  Uri.parse(url));
                                 startActivity(browserIntent);
                             }
@@ -1537,7 +1465,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         if (e1.getRawX() > XTHRESH) return false;
         if (e2.getRawX() > XTHRESH) return false;
         if (distanceY == 0) return false;
-            
+
         int y = (int)(mScreenHeight - e2.getRawY());
         int b = (int)(y * 100 / mScreenHeight);
         showTextMessage("bright " + b + " (y = " + y
