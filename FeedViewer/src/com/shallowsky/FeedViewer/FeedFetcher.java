@@ -140,7 +140,7 @@ public class FeedFetcher {
         Log.d("FeedFetcher", "Trying to fetch feeds.");
 
         // Before attempting to fetch anything, makes sure the net's up:
-        ConnectivityManager connMgr = (ConnectivityManager) 
+        ConnectivityManager connMgr = (ConnectivityManager)
             mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
         // Next line crashes. Why?
         NetworkInfo networkInfo = connMgr.getActiveNetworkInfo();
@@ -191,7 +191,7 @@ public class FeedFetcher {
             urlrssURL += "none";
         }
 
-        mFetchTask = new FetchFeedsTask();
+        mFetchTask = new FetchFeedsTask(mLocalDir);
         mFetchTask.execute(urlrssURL);
 
         // Execute will return right away, while the task runs on.
@@ -246,6 +246,12 @@ public class FeedFetcher {
     // FeedFetcher can kill the task if it takes way too long.
     // https://developer.android.com/training/basics/network-ops/connecting.html
     private class FetchFeedsTask extends AsyncTask<String, String, String> {
+
+        String mLocalDir = null;
+
+        public FetchFeedsTask(String localdir) {
+            mLocalDir = localdir;
+        }
 
         @Override
         protected String doInBackground(String... urls) {
@@ -597,7 +603,7 @@ public class FeedFetcher {
                 if (isStopped)
                     break;
             }
-        
+
             // Makes sure that the InputStream is closed after the app is
             // finished using it.
         } finally {
