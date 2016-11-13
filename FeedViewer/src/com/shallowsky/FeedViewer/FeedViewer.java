@@ -12,6 +12,7 @@ package com.shallowsky.FeedViewer;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
@@ -500,6 +501,34 @@ public class FeedViewer extends Activity implements OnGestureListener {
                 //Log.d("FeedViewer", "Loading remembered " + mLastUrl);
                 mWebView.loadUrl(mLastUrl);
                 mWebSettings.setDefaultFontSize(mFontSize);
+
+                // On the feeds page, we'll set mFeedDir to the first
+                // directory we find. If we have a remembered page,
+                // we'll set it to wherever that page is.
+                // If mLastUrl isn't a file:// URL, we're in trouble
+                // until we go to the feeds page.
+                if (mFeedDir == null && mLastUrl.startsWith("file://")) {
+                    int lastsep = mLastUrl.lastIndexOf(File.separator);
+                    Log.d("FeedViewer", "lastsep 1: " + lastsep);
+                    // That gave us a date/feed directory. Move up:
+                    if (lastsep > 7) {
+                        // Get the date/ directory:
+                        lastsep = mLastUrl.lastIndexOf(File.separator, lastsep-1);
+                        Log.d("FeedViewer", "lastsep 2: " + lastsep);
+                        if (lastsep > 7) {
+                            // Finally, get the directory containing
+                            // all the date dirs.
+                            lastsep = mLastUrl.lastIndexOf(File.separator, lastsep-1);
+                            Log.d("FeedViewer", "lastsep 3: " + lastsep);
+                            if (lastsep > 7) {
+                                mFeedDir = mLastUrl.substring(7, lastsep);
+                                Log.d("FeedViewer",
+                                      "Setting mFeedDir from initialPageLoad to "
+                                      + mFeedDir);
+                            }
+                        }
+                    }
+                }
             }
             catch (Exception e) {
                 mLastUrl = null;
@@ -965,7 +994,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
 
     /*
-     * Java has no basename utility.
+     * Java has no basename/dirname utilities.
      */
     public String basename(File f) {
         String path = f.getPath();
@@ -1032,8 +1061,11 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                     + feeds[feed].getName() + "</a></div>\n";
                                 // mFeedDir will be the first of
                                 // mBasePaths that actually has files in it.
-                                if (mFeedDir == null)
+                                if (mFeedDir == null) {
                                     mFeedDir = basedir.getPath();
+                                    Log.d("FeedViewer",
+                                          "Setting mFeedDir from loadFeedsList to " + mFeedDir);
+                                }
                             }
                             else {
                                 // If we erroneously don't get an
@@ -1623,6 +1655,8 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         if (mFeedFetcher == null) {
             mFeedFetcherText.append("Creating a new Feed Fetcher\n");
+            Log.d("FeedFetcher", "Creating a FeedFetcher with mFeedDir = "
+                  + mFeedDir);
             mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
                                            mFeedDir,
                                            new FeedProgress(mFeedFetcherText,

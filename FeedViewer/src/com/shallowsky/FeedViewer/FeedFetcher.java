@@ -81,6 +81,13 @@ public class FeedFetcher {
     Boolean mFetchImages = true;
     String mSavedURLs;
 
+    // We sometimes get zero or partial manifests.
+    // So to make sure we've read the whole thing,
+    // look for the special string ".EOF."
+    // as the last line.
+    String mEOFstr;
+    int mEOFlen;
+
     // Ick ick ick! There's no way to pass multiple arguments to
     // publishProgress() or to overload it in order to do an optional
     // toast. So instead we use this class variable to signal that
@@ -98,6 +105,9 @@ public class FeedFetcher {
         mServerUrl = serverurl;
         mLocalDir = localdir;
         mFeedProgress = fp;
+        mEOFstr = ".EOF.";
+        mEOFlen = mEOFstr.length();
+        Log.d("FeedFetcher", "Initializing, mLocalDir = " + mLocalDir);
     }
 
     public void setServerURL(String serverurl) {
@@ -161,9 +171,11 @@ public class FeedFetcher {
         // XXX Of course this should be relative to wherever we're
         // reading feeds, or have several options of path. Eventually.
         mSavedURLs =
-            "/mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls";
+            mLocalDir + File.separator + "saved-urls";
+        logProgress("Will look for saved urls in " + mSavedURLs);
         try {
             InputStream fis = new FileInputStream(mSavedURLs);
+            logProgress("Opened saved urls file " + mSavedURLs);
             InputStreamReader isr = null;
             isr = new InputStreamReader(fis);
             BufferedReader br = new BufferedReader(isr);
@@ -186,6 +198,7 @@ public class FeedFetcher {
             // I've found online, and neither do I.
         } catch(Throwable t) {
             logProgress("Couldn't read any saved urls");
+            logProgress("looking in " + mSavedURLs);
             // Zero out the filename so we won't later try to delete it.
             mSavedURLs = null;
             urlrssURL += "none";
@@ -201,43 +214,49 @@ public class FeedFetcher {
     }
 
     // Fetch MANIFEST and check to make sure it's complete.
-    // Throws IOException if the manifest isn't there or is incomplete.
+    // Throws IOException if the manifest isn't there.
+    // If it's there but incomplete, loop up to a set number of times.
     String fetchManifest(String manifestURL) throws IOException {
-        String manifest = downloadUrl(manifestURL);
+        int MAX_RETRIES = 10;
+        for (int i=0; i<MAX_RETRIES; ++i) {
+            String manifest = downloadUrl(manifestURL);
 
-        if (manifest.length() == 0) {
-            Log.d("FeedFetcher",
-                  "MANIFEST was zero length");
-            throw new IOException("MANIFEST was empty");
-        }
+            if (manifest.length() == 0) {
+                Log.d("FeedFetcher",
+                      "MANIFEST was zero length");
+                throw new IOException("MANIFEST was empty");
+            }
 
-        // We sometimes get zero or partial manifests.
-        // So to make sure we've read the whole thing,
-        // look for the special string ".EOF."
-        // as the last line.
-        Log.d("FeedFetcher", "Checking whether we got the full MANIFEST");
-        String eofstr = ".EOF.";
-        int eoflen = eofstr.length();
-        int manlen = manifest.length() - 1;
-        // Strip newlines off the end.
-        // These should always be just \n,
-        // but why count on it?
-        while (manlen > 0 &&
-               (manifest.charAt(manlen) == '\n' ||
-                manifest.charAt(manlen) == '\r'))
-            manlen -= 1;
-        // manlen should now point to the last non-newline.
-        Log.d("FeedFetcher", "total " + manlen + ", eoflen = " + eoflen);
-        String endman = manifest.substring(manlen-eoflen+1, manlen+1);
-        if (! endman.equals(eofstr)) {
+            Log.d("FeedFetcher", "Got MANIFEST. Was it complete?");
+            int manlen = manifest.length() - 1;
+            // Strip newlines off the end.
+            // These should always be just \n,
+            // but why count on it?
+            while (manlen > 0 &&
+                   (manifest.charAt(manlen) == '\n' ||
+                    manifest.charAt(manlen) == '\r'))
+                manlen -= 1;
+            // manlen should now point to the last non-newline.
+
+            String endman = manifest.substring(manlen-mEOFlen+1, manlen+1);
+            if (endman.equals(mEOFstr)) {
+                Log.d("FeedFetcher", "End of MANIFEST was fine");
+                return manifest;
+            }
+
+            // We got a partial manifest. Sleep then loop around again.
+            // In theory it shouldn't take long to write the manifest;
+            // all feeds have been read, it's just writing a list of filenames.
             Log.d("FeedFetcher",
                   "Partial MANIFEST of length " + manlen);
             Log.d("FeedFetcher", "end string was " + endman);
-            throw new IOException("Partial MANIFEST");
+            sleep(2000);
         }
-        Log.d("FeedFetcher", "End of MANIFEST was fine");
 
-        return manifest;
+        // If we get here and haven't returned a manifest after numerous tries,
+        // there's a problem. Better throw an error.
+        throw new IOException("MANIFEST not complete after " + MAX_RETRIES
+                              + " tries");
     }
 
     // Most of FeedFetcher runs as an AsyncTask,
@@ -266,7 +285,7 @@ public class FeedFetcher {
             String feeddir = mServerUrl + "/feeds/"
                 + todayStr + "/";
             String manifestURL = feeddir + "MANIFEST";
-            String manifest;
+            String manifest = null;
 
             // Has feedme already run? Check whether the manifest
             // is already there.
@@ -373,7 +392,7 @@ public class FeedFetcher {
                     }
                 }
             }
-            Log.d("FeedFetcher", "Fetched manifest");
+            Log.d("FeedFetcher", "Fetched complete manifest");
 
             Log.d("FeedFetcher", "\n=======================\nDownloading");
             String datedir = mLocalDir + "/" + todayStr + "/";
@@ -383,6 +402,10 @@ public class FeedFetcher {
             for (String f : filenames) {
                 if (isCancelled())
                     return "Cancelling file downloads.";
+                if (f == mEOFstr) {
+                    Log.d("FeedDetcher", "Found EOF string, end of manifest");
+                    break;
+                }
 
                 // Skip directories; we'll make them later with mkdirs.
                 if (f.endsWith("/")) {
