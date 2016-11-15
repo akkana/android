@@ -402,7 +402,7 @@ public class FeedFetcher {
             for (String f : filenames) {
                 if (isCancelled())
                     return "Cancelling file downloads.";
-                if (f == mEOFstr) {
+                if (f.equals(mEOFstr)) {
                     Log.d("FeedDetcher", "Found EOF string, end of manifest");
                     break;
                 }
