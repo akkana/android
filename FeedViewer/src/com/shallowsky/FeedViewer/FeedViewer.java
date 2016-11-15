@@ -1666,6 +1666,13 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
         }
 
         mFeedFetcherDialog.show();
+
+        // Scroll to the bottom any time we view it.
+        // If we're still fetching, this should happen automatically as
+        // the FeedProgress updates, but if we're done fetching, it can
+        // show the top of the dialog and it takes forever for the user
+        // to fling-scroll all the way to the bottom.
+        ((ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)).fullScroll(View.FOCUS_DOWN);
     }
 
     /********** Callbacks for buttons in the FeedFetcher dialog ******/
