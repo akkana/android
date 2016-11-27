@@ -46,12 +46,14 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.WindowManager.LayoutParams;
+import android.view.LayoutInflater;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.ScrollView;
+import android.widget.EditText;
 import android.text.method.ScrollingMovementMethod;
 
 import android.os.Build;
@@ -100,6 +102,8 @@ public class FeedViewer extends Activity implements OnGestureListener {
     FeedFetcher mFeedFetcher = null;
     Dialog mFeedFetcherDialog = null;
     TextView mFeedFetcherText = null;
+    // The server from which we'll fetch the feeds
+    String mFeedServer = null;
 
     // Params that can be saved
     int mFontSize = 18;
@@ -1387,7 +1391,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             saveStateInPreferences();
             return true;
         case R.id.feedfetcher:
-            showFeedFetcherProgress();
+            initiateFeedFetch();
             return true;
         }
         return false;
@@ -1611,8 +1615,80 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
      */
 
-    /********** FeedFetcher dialog ******/
+    /********** FeedFetcher interface ******/
 
+    /* Initiate fetching feeds.
+     * If mFeedServer is already defined, go straight to showing the
+     * FeedFetcher progress dialog. Else prompt for a feed server.
+     */
+    private void initiateFeedFetch() {
+        if (mFeedServer == null)
+            mFeedServer = mSharedPreferences.getString("feed_server",
+                                                       null);
+        if (mFeedServer == null)
+            promptForFeedServer();
+        else
+            showFeedFetcherProgress();
+    }
+
+    /********** Prompt for feed server URL dialog ******/
+    private void promptForFeedServer() {
+        Log.d("FeedViewer", "No feed server assigned");
+
+        // Pop up a prompt dialog to read the server URL
+        LayoutInflater li = LayoutInflater.from(this);
+        View promptView = li.inflate(R.layout.prompt, null);
+
+        AlertDialog.Builder alertDialogBuilder
+            = new AlertDialog.Builder(this);
+        alertDialogBuilder.setView(promptView);
+
+        final EditText userInput = (EditText)promptView
+            .findViewById(R.id.editTextDialogUserInput);
+
+        // set dialog message
+        alertDialogBuilder
+            .setCancelable(false)
+            .setPositiveButton("OK",
+                               new DialogInterface.OnClickListener() {
+                                   public void onClick(DialogInterface dialog,
+                                                       int id) {
+                                       mFeedServer = userInput.getText().toString();
+                                       if (mFeedServer != null) {
+                                           SharedPreferences.Editor editor
+                                               = mSharedPreferences.edit();
+                                           editor.putString("feed_server",
+                                                            mFeedServer);
+                                           editor.commit();
+                                           Log.d("FeedViewer",
+                                                 "Saved new feed server: "
+                                                   + mFeedServer);
+                                           printPreferences();
+
+                                           showFeedFetcherProgress();
+                                       }
+                                   }
+                               })
+            .setNegativeButton("Cancel",
+                               new DialogInterface.OnClickListener() {
+                                   public void onClick(DialogInterface dialog,
+                                                       int id) {
+                                       dialog.cancel();
+                                   }
+                               });
+
+        // create alert dialog
+        AlertDialog alertDialog = alertDialogBuilder.create();
+
+        // show it
+        alertDialog.show();
+    }
+
+    /********** FeedFetcher dialog ******/
+    /* This is called from initiateFeedFetch if we already have a
+     * mFeedServer URL set in preferences, or else from the
+     * promptForFeedServer dialog after setting it the first time.
+     */
     private void showFeedFetcherProgress() {
 
         // Pop up a dialog with a textview that we can modify later:
@@ -1655,10 +1731,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
 
         if (mFeedFetcher == null) {
             mFeedFetcherText.append("Creating a new Feed Fetcher\n");
+            if (mFeedServer == null) {
+                Log.d("FeedViewer", "Can't fetch feeds: mFeedServer is null!");
+                return;
+            }
+
             Log.d("FeedFetcher", "Creating a FeedFetcher with mFeedDir = "
-                  + mFeedDir);
-            mFeedFetcher = new FeedFetcher(this, "http://shallowsky.com",
-                                           mFeedDir,
+                  + mFeedDir + " and server " + mFeedServer);
+            mFeedFetcher = new FeedFetcher(this, mFeedServer, mFeedDir,
                                            new FeedProgress(mFeedFetcherText,
                                                             (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
             if (! mFeedFetcher.fetchFeeds())
