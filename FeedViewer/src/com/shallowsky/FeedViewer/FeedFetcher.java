@@ -12,8 +12,7 @@ package com.shallowsky.FeedViewer;
  * URL encoded and connected by the string '%0a'.
  * For instance,
  *   /feedme/urlrss.cgi?xtraurls=http%3A%2F%2Fblog.arduino.cc%2F2013%2F07%2F10%2Fsend-in-the-clones%2F%0ahttp%3A%2F%2Fread.bi%2F10Lbfh9%0ahttp%3A%2F%2Fwww.popsci.com%2Ftechnology%2Farticle%2F2013-07%2Fdrones-civil-war%0ahttp%3A%2F%2Fwww.thisamericanlife.org%2Fblog%2F2015%2F05%2Fcanvassers-study-in-episode-555-has-been-retracted
- * The saved URLs come from the (line separated) file
- * /mnt/extSdCard/Android/data/com.shallowsky.FeedViewer/saved-urls.
+ * The saved URLs come from the (line separated) file $feeddir/saved-urls.
  *
  * Once the initial urlrss.cgi URL has been requested,
  * we wait for it to finish.
@@ -37,6 +36,8 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 
 import android.os.AsyncTask;
 import android.widget.Toast;
@@ -282,8 +283,8 @@ public class FeedFetcher {
             Date curDate = new Date();
             SimpleDateFormat format = new SimpleDateFormat("MM-dd-EEE");
             String todayStr = format.format(curDate);
-            String feeddir = mServerUrl + "/feeds/"
-                + todayStr + "/";
+            String feeddirbase = mServerUrl + "/feeds/";
+            String feeddir = feeddirbase + todayStr + "/";
             String manifestURL = feeddir + "MANIFEST";
             String manifest = null;
 
@@ -298,15 +299,42 @@ public class FeedFetcher {
             }
 
             if (manifest == null) {
-                // First, call urlrss to initiate feedme:
+                // feedme hasn't finished running, but has it started?
+                // If it has, the directory should be there.
                 try {
-                    publishProgress(urls[0]);
-                    output = downloadUrl(urls[0]);
-                    publishProgress("\nStarting feedme ...\n");
-                    publishProgress(output);
+                    output = downloadUrl(feeddir);
                 } catch (IOException e) {
-                    return "Couldn't initiate feedme: IOException on "
-                        + urls[0];
+                    // Directory isn't there yet, so we need to run feedme.
+                    output = null;
+                }
+
+                // First, call urlrss to initiate feedme:
+                // XXX On the Galaxy S5 under Marshmallow, this
+                // almost always fails the first time with an IOException.
+                // It works the second time.
+                // It always worked the first time on the Galaxy S4, KitKat.
+                // urls[0] is something like:
+                // http://example.com/feedme/urlrss.cgi?xtraurls=http%3A%2F%2Fwww.theatlantic.com%2Ftechnology%2Farchive%2F2013%2F12%2Fno-old-maps-actually-say-here-be-dragons%2F282267%2F%0Ahttp%3A%2F%2Frss.slashdot.org%2F%7Er%2FSlashdot%2Fslashdot%2F%7E3%2F4sxG352Ro_I%2Fbarnes-noble-announces-a-new-50-android-tablet
+                // The second time, we don't fetch this because we see
+                // that feedme already ran or is already running.
+                // But we should also check for LOG in case it's
+                // in themiddle of running but hasn't finished.
+                if (output == null) {
+                    try {
+                        publishProgress(urls[0]);
+                        output = downloadUrl(urls[0]);
+                        publishProgress("\nStarting feedme ...\n");
+                        publishProgress(output);
+                    } catch (IOException e) {
+                        // Ugly, but the only way to get stack trace as string:
+                        StringWriter sw = new StringWriter();
+                        PrintWriter pw = new PrintWriter(sw);
+                        e.printStackTrace(pw);
+                        return "Couldn't initiate feedme: IOException on "
+                            + urls[0]
+                            + "\n Exception is" + e.getMessage()
+                            + "\n and stack trace is:\n" + sw.toString();
+                    }
                 }
 
                 // Now, we wait for MANIFEST to appear,
@@ -564,21 +592,37 @@ public class FeedFetcher {
         try {
             URL url = new URL(urlstr);
             HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+            Log.d("FeedFetcher", "Set up connection");
             conn.setReadTimeout(10000    /* milliseconds */);
             conn.setConnectTimeout(15000 /* milliseconds */);
             conn.setRequestMethod("GET");
             conn.setDoInput(true);
+            Log.d("FeedFetcher", "Set all the timeouts");
             // Starts the query
             conn.connect();
+            Log.d("FeedFetcher", "Connected");
+
+            // getResponseCode() will throw IOException rather than
+            // returning the response code if it thinks it's a
+            // code that indicates an error, e.g. 404.
             int response = conn.getResponseCode();
+            Log.d("FeedFetcher",
+                  "Response code: " + response + " for " + urlstr);
+            /*
+            logProgressOnUIThread("Response code: " + response);
             if (response != 200)
                 logProgressOnUIThread("Response code: " + response);
             else
                 Log.d("FeedFetcher", "Response code: " + response);
+            */
+
+            // If we get here, presumably there's something there to read.
             is = conn.getInputStream();
+            Log.d("FeedFetcher", "Got the input stream");
 
             // Convert the InputStream into a string
             String contentAsString = readIt(is);
+            Log.d("FeedFetcher", "Read the output");
             return contentAsString;
 
             // Makes sure that the InputStream is closed after the app is
