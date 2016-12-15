@@ -1,9 +1,32 @@
-//  clipsloc = "file:///storage/extSdCard/Android/data/com.shallowsky.WebClient/Tweet/Birdsongs/";
-  clipsloc = "file:///storage/extSdCard/Tweet/";
+// Javascript to let the user choose a bird name, match the name
+// and play birdsong clips.
+// Copyright 2014, 2016 by Akkana Peck.
+// Share and enjoy under the GPL v2 or later.
 
-  // It would be nice to read the bird list off the filesystem,
-  // but we can't rely on Javascript being able to do that, so:
-  var bird_list = [
+// Android has this lovely habit of changing the way to access the SD card
+// with every release. In KitKat it was /storage/extSdCard, but in Marshmallow
+// it varies depending on the UUID of the card. So we have to search for it.
+// We can't do that until onDeviceReady.
+
+clipsloc = null;
+
+document.addEventListener("deviceready", onDeviceReady, false);
+
+function onDeviceReady() {
+    //console.log(cordova.file);
+    //clipsloc = "file:///storage/extSdCard/Android/data/com.shallowsky.WebClient/Tweet/Birdsongs/";
+    //clipsloc = cordova.file.externalDataDirectory + "Birdsongs";
+    clipsloc = cordova.file.externalRootDirectory + "Tweet";
+    textfield = document.getElementById("nametext");
+    textfield.value = "Hello, world";
+    //alert("Looking in " + clipsloc);
+    alert("app storage: " + cordova.file.externalApplicationStorageDirectory
+          + ", data dir: " + cordova.file.externalDataDirectory);
+}
+
+// It would be nice to read the bird list off the filesystem,
+// but we can't rely on Javascript being able to do that, so:
+var bird_list = [
     "Aberts_Towhee,_.mp3",
     "Alder_Flycatcher,_Willow_Flycatcher.mp3",
     "Aleutian_Tern,_Black_Tern.mp3",
@@ -367,7 +390,7 @@
   ];
 
   var lastname = "";
-  function findBird(birdname) {
+function findBird(birdname) {
     // We can only call this onKeyUp, not onChange -- onChange only fires
     // on focus changes (so what's the difference between it and onBlur?).
     // So to prevent firing on things like Enter or Shift, check to see
@@ -394,31 +417,42 @@
         var birdtxt = document.createTextNode(bird);
         link.appendChild(birdtxt);
         item.appendChild(link);
-      }
     }
   }
-  function search() {
+}
+function search() {
     textfield = document.getElementById("nametext");
     alert(textfield.value);
     findBird(textfield.value);
-  }
+}
 
-  function letter(c) {
+function letter(c) {
     textfield = document.getElementById("nametext");
     val = textfield.value;
     val += c;
     textfield.value = val;
     findBird(val);
-  }
-  function clearall() {
+}
+function clearall() {
     textfield = document.getElementById("nametext");
     textfield.value = "";
     findBird("");
-  }
-  function backspace() {
+}
+function backspace() {
     textfield = document.getElementById("nametext");
     val = textfield.value;
     len = val.length;
     textfield.value = val.slice(0, len-1);
     findBird(val);
-  }
+}
+
+/*
+function doload() {
+      alert("Loaded");
+      matchlist = document.getElementById("matchlist");
+      if (matchlist)
+          matchlist.innerHTML = "Loaded";
+      textfield = document.getElementById("nametext");
+      textfield.value = "hello, world";
+}
+*/
