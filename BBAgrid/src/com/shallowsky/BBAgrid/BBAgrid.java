@@ -18,6 +18,7 @@ import android.widget.Toast;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.location.LocationProvider;
 
 import java.util.Set;
 import java.util.HashSet;
@@ -83,9 +84,17 @@ public class BBAgrid extends Activity {
             updateText(loc, "loc changed");
         }
 
-        public void onStatusChanged(String s, int i, Bundle b) {
-            Toast.makeText(BBAgrid.this, "Provider status changed",
-                           Toast.LENGTH_LONG).show();
+        public void onStatusChanged(String providerStr, int status, Bundle b) {
+            String s;
+            if (status == LocationProvider.OUT_OF_SERVICE)
+                s = "Status changed: Out of service";
+            else if (status == LocationProvider.AVAILABLE)
+                s = "Status changed: Available";
+            else if (status == LocationProvider.TEMPORARILY_UNAVAILABLE)
+                s = "Status changed: Temporarily unavailable";
+            else
+                s = "Provider status changed to " + status;
+            Toast.makeText(BBAgrid.this, s, Toast.LENGTH_LONG).show();
         }
 
         public void onProviderDisabled(String s) {
