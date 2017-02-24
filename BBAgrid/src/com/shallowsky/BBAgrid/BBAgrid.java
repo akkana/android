@@ -53,16 +53,36 @@ import java.util.ArrayList;
 public class BBAgrid extends Activity {
 
     private static final int REQUEST_ENABLE_BT = 1;
-    private static final long MIN_TIME_BETWEEN_UPDATES = 15000;   // msec
-    private static final float MIN_DISTANCE_CHANGE = 10;          // m
+
+    // How often will we update when the app is in the foreground
+    // and we're far from a grid boundary?
+    private static final long UPDATE_TIME_FOREGROUND = 15000;     // msec
+
+    // How often will we update when the app is in the background
+    // and we're far from a grid boundary?
+    private static final long UPDATE_TIME_BACKGROUND = 30000;     // msec
+
+    // Don't update more often than this, even if close to a boundary.
+    private static final long MIN_UPDATE_TIME = 5000;             // msec
+
+    // Would be nice to specify min distance, but that still requires
+    // the device to wake up frequently to check location, so Google
+    // warns it's not good for battery life.
+    //private static final float MIN_DISTANCE_CHANGE = 10;        // m
+
+    // If we're closer than this (meters) to a boundary, update faster:
+    private static final double NEAR_BOUNDARY = 350;
 
     public static final double EARTH_RADIUS = 6371000.;           // m
 
     private static final int BBA_NOTIFICATION_ID = 1;
 
+    long mUpdateTime = UPDATE_TIME_FOREGROUND;
+
     Button mBtnCheckLoc;
     TextView mOutput;
     LocationManager mLocMgr;
+    MyLocationListener mGPSLocListener = null;
 
     // NW corners of every grid block, including fake blocks to the
     // S, E and SE to close the blocks on the edges.
@@ -73,13 +93,16 @@ public class BBAgrid extends Activity {
 
     int mSequence = 0;    // Mostly for debugging
 
-    // Current grid block and distance to adjacent blocks:
+    // Current grid block
     int mCurRow;
     int mCurCol;
+    // distances to adjacent blocks, in meters:
     double mWestDist;
     double mEastDist;
     double mNorthDist;
     double mSouthDist;
+
+    boolean mForeground = true;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -255,10 +278,8 @@ public class BBAgrid extends Activity {
         mOutput = (TextView)findViewById(R.id.output);
 
         mLocMgr = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-        mLocMgr.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                                       MIN_TIME_BETWEEN_UPDATES,
-                                       MIN_DISTANCE_CHANGE,
-                                       new MyLocationListener());
+        mGPSLocListener = new MyLocationListener();
+        resetUpdateTime();
 
         updateLoc();
 
@@ -275,20 +296,27 @@ public class BBAgrid extends Activity {
      */
     @Override
     public void onResume() {
-        Log.d("BBAgrid", "onResume");
         super.onResume();
+        Log.d("BBAgrid", "**** onResume");
+
+        mForeground = true;
+        resetUpdateTime();
     }
 
-    /** Saves app state and unregisters mount listeners.
+    /**
      *
      * This is basically last point Android system promises you can do anything.
      * You can safely ignore other lifecycle methods.
      */
     @Override
     public void onPause() {
-        Log.d("BBAgrid", "onPause");
         super.onPause();
+        Log.d("BBAgrid", "**** onPause");
+
+        mForeground = false;
+        resetUpdateTime();
     }
+
     /********  END APP LIFECYCLE FUNCTIONS *******/
 
     public void locationToGridBlock(Location loc) {
@@ -355,6 +383,58 @@ public class BBAgrid extends Activity {
         return EARTH_RADIUS * c;
     }
 
+    /**
+     * Calculate update time according to the base time
+     * (which reflects whether we're in foreground or background)
+     * and the distance to the nearest grid boundary
+     * (distances should already have been calculated).
+     * If we're near a grid boundary, update a lot more frequently.
+     */
+    public void resetUpdateTime() {
+        long basetime = (mForeground ? UPDATE_TIME_FOREGROUND
+                                     : UPDATE_TIME_BACKGROUND);
+        double mindist = Math.min(mWestDist,
+                                  Math.min(mEastDist,
+                                           Math.min(mNorthDist, mSouthDist)));
+        Log.d("BBAgrid", "mindist = " + mindist);
+        if (mindist > NEAR_BOUNDARY) {
+            Log.d("BBAgrid", "Not near a boundary");
+            mUpdateTime = basetime;
+            return;
+        }
+
+        // We're near a boundary. How near? Adjust update time accordingly.
+        // Figure a typical walking speed is of 50 meters per minute
+        // (just under 2mph).
+
+        // Very near a boundary, we'd like to update so it's unlikely
+        // the user will travel more than 10m before the next update.
+        // At 50 m/min that's about 12 seconds (let's say 10).
+        // Farther away, all that matters is that we haven't gotten
+        // more than 80% of the distance to the boundary before the
+        // next update.
+        long msecs = (long)(mindist * 600.);
+        //Log.d("BBAgrid", "Calculated " + msecs + " msecs");
+        if (msecs > basetime)
+            msecs = basetime;
+        else if (msecs < MIN_UPDATE_TIME)
+            msecs = MIN_UPDATE_TIME;
+
+        // Has it changed much since the last update?
+        // Don't want to be constantly changing the location manager
+        // if the differences are only trivial.
+        if (Math.abs(msecs - mUpdateTime) > 1000) {
+            mUpdateTime = msecs;
+
+            mLocMgr.removeUpdates(mGPSLocListener);
+            mLocMgr.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                                           mUpdateTime,
+                                           0,   //MIN_DISTANCE_CHANGE,
+                                           mGPSLocListener);
+            Log.d("BBAgrid", "Changing update time to " + msecs);
+        }
+    }
+
     public void updateText(Location loc, String where) {
         try {
             locationToGridBlock(loc);
@@ -362,8 +442,8 @@ public class BBAgrid extends Activity {
             mOutput.setText("Can't get location yet");
             return;
         }
-        // mCurRow and mCurCol, plus mWestDist, etc., are now set.
 
+        // mCurRow and mCurCol, plus mWestDist, etc., are now set.
         if (mCurRow < 0 || mCurCol < 0) {
             mOutput.setText("Outside the grid");
         }
@@ -383,6 +463,14 @@ public class BBAgrid extends Activity {
                 output += String.format("\n%1$dm S to %2$d%3$d",
                                         (int)mSouthDist, mCurRow+1, mCurCol);
         }
+
+        // For debugging, include the serial of the update
+        // and whether it came from the request or the button.
+        // Comment this out for real users.
+        output += "\n\n(" + where + " " + mSequence + ", "
+            + (int)(mUpdateTime/1000) + ")";
+
+        // Finally, show the text.
         mOutput.setText(output);
 
         // And put a notification in the status bar, too.
@@ -391,8 +479,7 @@ public class BBAgrid extends Activity {
             PendingIntent.getActivity(this,
                                       0,
                                       resultIntent,
-                                      PendingIntent.FLAG_UPDATE_CURRENT
-                                      );
+                                      PendingIntent.FLAG_UPDATE_CURRENT);
 
         Notification.Builder mBuilder
             = new Notification.Builder(getApplicationContext())
@@ -424,7 +511,7 @@ public class BBAgrid extends Activity {
     private class MyLocationListener implements LocationListener {
 
         public void onLocationChanged(Location loc) {
-            updateText(loc, "loc changed");
+            updateText(loc, "listener");
         }
 
         public void onStatusChanged(String providerStr, int status, Bundle b) {
