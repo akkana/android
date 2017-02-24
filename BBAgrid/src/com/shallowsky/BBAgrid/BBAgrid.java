@@ -1,14 +1,19 @@
 /* XXX TO DO:
-   - Show distance to nearest other grid blocks.
+   https://developer.android.com/reference/android/location/LocationManager.html#requestLocationUpdates%28java.lang.String,%20long,%20float,%20android.location.LocationListener%29
+   says don't use interval < 5 min if in the background
+   and that using minDistance at all will be a power problem.
+   Example with two listeners:
+   http://stackoverflow.com/questions/14478179/background-service-with-location-listener-in-android
+
    - Change the MIN_DISTANCE_CHANGE if we're near a block boundary:
      maybe to something like half the distance to the nearest boundary,
      or 10m if we're within 100m of a boundary.
      (Mouser says his GPS noise is between 5 and 9 meters w/good reception.)
+
    - investigate going to sleep when the app isn't in the foreground,
      and updating position upon being displayed.
      (But maybe don't make that mandatory, see next item.)
-   - Notification in the status bar showing current grid.
-     https://developer.android.com/guide/topics/ui/notifiers/notifications.html
+
    - Draw a picture of where we are in the grid block relative to other
      squares (Canvas?
      https://developer.android.com/reference/android/graphics/drawable/package-summary.html
@@ -22,9 +27,7 @@ import android.os.Bundle;
 import android.app.Activity;
 
 import android.content.Context;
-//import android.content.BroadcastReceiver;
-//import android.content.Intent;
-//import android.content.IntentFilter;
+import android.content.Intent;
 
 import android.view.View;
 
@@ -39,8 +42,10 @@ import android.location.LocationProvider;
 
 import android.util.Log;
 
-//import java.util.HashTable;
-//import java.util.Dictionary;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.ArrayList;
@@ -52,6 +57,8 @@ public class BBAgrid extends Activity {
     private static final float MIN_DISTANCE_CHANGE = 10;          // m
 
     public static final double EARTH_RADIUS = 6371000.;           // m
+
+    private static final int BBA_NOTIFICATION_ID = 1;
 
     Button mBtnCheckLoc;
     TextView mOutput;
@@ -258,6 +265,32 @@ public class BBAgrid extends Activity {
         mBtnCheckLoc.setOnClickListener(btnUpdateOnClickListener);
     }
 
+    /********  APP LIFECYCLE FUNCTIONS *******/
+    /**
+     * Main entry point to the app.
+     *
+     * This is called after onCreate() or any time when the system
+     * switches back to the app. Use it to load data, return to saved
+     * state and add custom behaviour.
+     */
+    @Override
+    public void onResume() {
+        Log.d("BBAgrid", "onResume");
+        super.onResume();
+    }
+
+    /** Saves app state and unregisters mount listeners.
+     *
+     * This is basically last point Android system promises you can do anything.
+     * You can safely ignore other lifecycle methods.
+     */
+    @Override
+    public void onPause() {
+        Log.d("BBAgrid", "onPause");
+        super.onPause();
+    }
+    /********  END APP LIFECYCLE FUNCTIONS *******/
+
     public void locationToGridBlock(Location loc) {
         // Given a location, figure out what LA-BBA block it's in
         // and return that as a string. Also fills in mCurRow, mCurCol.
@@ -323,24 +356,18 @@ public class BBAgrid extends Activity {
     }
 
     public void updateText(Location loc, String where) {
-        locationToGridBlock(loc);
+        try {
+            locationToGridBlock(loc);
+        } catch (final Exception e) {
+            mOutput.setText("Can't get location yet");
+            return;
+        }
         // mCurRow and mCurCol, plus mWestDist, etc., are now set.
 
         if (mCurRow < 0 || mCurCol < 0) {
             mOutput.setText("Outside the grid");
         }
 
-        // This causes crashes:
-        //    String.format("(%d %s)\n\n%.4s\n%.4f\n%.0f",
-        // but positional formatting doesn't.
-
-        /*
-        mOutput.setText(String.format("Block %1$s\n\n%2$f\n%3$f\n%4$d m\n\n(%5$s %6$d)",
-                                      block,
-                                      loc.getLongitude(), loc.getLatitude(),
-                                      (int)(loc.getAltitude()),
-                                      where, mSequence));
-         */
         String output = String.format("Block %1$d%2$d\n", mCurRow, mCurCol);
         if (mCurRow >= 0 && mCurCol >= 0) {
             if (mWestDist < mEastDist)
@@ -358,6 +385,26 @@ public class BBAgrid extends Activity {
         }
         mOutput.setText(output);
 
+        // And put a notification in the status bar, too.
+        Intent resultIntent = new Intent(this, BBAgrid.class);
+        PendingIntent resultPendingIntent =
+            PendingIntent.getActivity(this,
+                                      0,
+                                      resultIntent,
+                                      PendingIntent.FLAG_UPDATE_CURRENT
+                                      );
+
+        Notification.Builder mBuilder
+            = new Notification.Builder(getApplicationContext())
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("LABBA Block " + mCurRow + mCurCol)
+            .setContentText("Los Alamos Breeding Bird Atlas")
+            .setContentIntent(resultPendingIntent);
+
+        NotificationManager manager
+            = (NotificationManager)getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(BBA_NOTIFICATION_ID, mBuilder.build());
+
         mSequence += 1;
     }
 
@@ -369,7 +416,8 @@ public class BBAgrid extends Activity {
                 }};
 
     private void updateLoc() {
-        Location loc = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        Location loc
+            = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
         updateText(loc, "button");
     }
 
