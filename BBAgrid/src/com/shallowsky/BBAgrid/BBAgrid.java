@@ -63,7 +63,7 @@ public class BBAgrid extends Activity {
     private static final long UPDATE_TIME_BACKGROUND = 30000;     // msec
 
     // Don't update more often than this, even if close to a boundary.
-    private static final long MIN_UPDATE_TIME = 5000;             // msec
+    private static final long MIN_UPDATE_TIME = 8000;             // msec
 
     // Would be nice to specify min distance, but that still requires
     // the device to wake up frequently to check location, so Google
@@ -77,10 +77,11 @@ public class BBAgrid extends Activity {
 
     private static final int BBA_NOTIFICATION_ID = 1;
 
+    private static final double BLOCK_SIZE = 2500.;  // Size of a grid block, m
+
     long mUpdateTime = UPDATE_TIME_FOREGROUND;
 
-    Button mBtnCheckLoc;
-    TextView mOutput;
+    DrawGridView mDrawGridView = null;
     LocationManager mLocMgr;
     MyLocationListener mGPSLocListener = null;
 
@@ -107,6 +108,8 @@ public class BBAgrid extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mDrawGridView = new DrawGridView(this);
 
         setContentView(R.layout.main);
 
@@ -274,8 +277,7 @@ public class BBAgrid extends Activity {
         mStartColumn = new int[] { 1, 1, 1, 1, 1, 1,  0, 0, 5, 6 };
         mColsInRow = new int[] { 6, 6, 6, 6, 6, 6, 10, 9, 4, 2 };
 
-        mBtnCheckLoc = (Button)findViewById(R.id.checkloc);
-        mOutput = (TextView)findViewById(R.id.output);
+        mDrawGridView = (DrawGridView)findViewById(R.id.drawgridview);
 
         mLocMgr = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
         mGPSLocListener = new MyLocationListener();
@@ -283,7 +285,11 @@ public class BBAgrid extends Activity {
 
         updateLoc();
 
-        mBtnCheckLoc.setOnClickListener(btnUpdateOnClickListener);
+        Button btn = (Button)findViewById(R.id.checkloc);
+        btn.setOnClickListener(updateOnClickListener);
+
+        btn = (Button)findViewById(R.id.quit);
+        btn.setOnClickListener(quitOnClickListener);
     }
 
     /********  APP LIFECYCLE FUNCTIONS *******/
@@ -365,6 +371,11 @@ public class BBAgrid extends Activity {
         double southGridLat = (mNWCoords[mCurRow+1][mCurCol][1]
                                + mNWCoords[mCurRow+1][mCurCol+1][1]) / 2.;
         mSouthDist = haversine_dist(southGridLat, lon, lat, lon);
+
+        mDrawGridView.setDistances(mWestDist/BLOCK_SIZE,
+                                   mEastDist/BLOCK_SIZE,
+                                   mNorthDist/BLOCK_SIZE,
+                                   mSouthDist/BLOCK_SIZE);
     }
 
     public double haversine_dist(double lat1, double lon1,
@@ -439,39 +450,30 @@ public class BBAgrid extends Activity {
         try {
             locationToGridBlock(loc);
         } catch (final Exception e) {
-            mOutput.setText("Can't get location yet");
+            mDrawGridView.setUpperString("Can't get location yet");
+            mDrawGridView.setRowCol(-1, -1);
+            mDrawGridView.redraw();
             return;
         }
 
+
         // mCurRow and mCurCol, plus mWestDist, etc., are now set.
         if (mCurRow < 0 || mCurCol < 0) {
-            mOutput.setText("Outside the grid");
+            mDrawGridView.setUpperString("Outside the grid");
+            mDrawGridView.setRowCol(-1, -1);
+            mDrawGridView.redraw();
+            return;
         }
 
-        String output = String.format("Block %1$d%2$d\n", mCurRow, mCurCol);
-        if (mCurRow >= 0 && mCurCol >= 0) {
-            if (mWestDist < mEastDist)
-                output += String.format("\n%1$dm W to %2$d%3$d",
-                                        (int)mWestDist, mCurRow, mCurCol-1);
-            else
-                output += String.format("\n%1$dm E to %2$d%3$d",
-                                        (int)mEastDist, mCurRow, mCurCol+1);
-            if (mNorthDist < mSouthDist)
-                output += String.format("\n%1$dm N to %2$d%3$d",
-                                        (int)mNorthDist, mCurRow-1, mCurCol);
-            else
-                output += String.format("\n%1$dm S to %2$d%3$d",
-                                        (int)mSouthDist, mCurRow+1, mCurCol);
-        }
+        mDrawGridView.setRowCol(mCurRow, mCurCol);
 
         // For debugging, include the serial of the update
         // and whether it came from the request or the button.
         // Comment this out for real users.
-        output += "\n\n(" + where + " " + mSequence + ", "
-            + (int)(mUpdateTime/1000) + ")";
+        mDrawGridView.setLowerString("(" + where + " " + mSequence + ", "
+                                     + (int)(mUpdateTime/1000) + ")");
 
-        // Finally, show the text.
-        mOutput.setText(output);
+        mDrawGridView.redraw();
 
         // And put a notification in the status bar, too.
         Intent resultIntent = new Intent(this, BBAgrid.class);
@@ -495,7 +497,18 @@ public class BBAgrid extends Activity {
         mSequence += 1;
     }
 
-    private Button.OnClickListener btnUpdateOnClickListener
+    private Button.OnClickListener quitOnClickListener
+        = new Button.OnClickListener() {
+                @Override
+                public void onClick(View arg0) {
+                    // If I ever figure out how to exit an android app,
+                    // that's what we should do there. Until then:
+                    mLocMgr.removeUpdates(mGPSLocListener);
+                    mDrawGridView.setUpperString("Updating disabled");
+                    mDrawGridView.redraw();
+                }};
+
+    private Button.OnClickListener updateOnClickListener
         = new Button.OnClickListener() {
                 @Override
                 public void onClick(View arg0) {
@@ -506,6 +519,7 @@ public class BBAgrid extends Activity {
         Location loc
             = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
         updateText(loc, "button");
+        resetUpdateTime();
     }
 
     private class MyLocationListener implements LocationListener {
