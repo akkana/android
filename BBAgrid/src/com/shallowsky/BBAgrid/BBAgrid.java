@@ -71,15 +71,13 @@ public class BBAgrid extends Activity {
     //private static final float MIN_DISTANCE_CHANGE = 10;        // m
 
     // If we're closer than this (meters) to a boundary, update faster:
-    private static final double NEAR_BOUNDARY = 350;
+    private static final double NEAR_BOUNDARY = 250;
 
     public static final double EARTH_RADIUS = 6371000.;           // m
 
     private static final int BBA_NOTIFICATION_ID = 1;
 
-    private static final double BLOCK_SIZE = 2500.;  // Size of a grid block, m
-
-    long mUpdateTime = UPDATE_TIME_FOREGROUND;
+    long mUpdateTime = -1;    // -1 means we haven't started updating yet.
 
     DrawGridView mDrawGridView = null;
     LocationManager mLocMgr;
@@ -272,7 +270,6 @@ public class BBAgrid extends Activity {
                 { 0., 0. },
             },
         };
-        //Log.d("BBAgrid", " Initialized mNWCoords:" + Arrays.deepToString(mNWCoords));
         mNumRows = 10;
         mStartColumn = new int[] { 1, 1, 1, 1, 1, 1,  0, 0, 5, 6 };
         mColsInRow = new int[] { 6, 6, 6, 6, 6, 6, 10, 9, 4, 2 };
@@ -281,9 +278,9 @@ public class BBAgrid extends Activity {
 
         mLocMgr = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
         mGPSLocListener = new MyLocationListener();
-        resetUpdateTime();
 
-        updateLoc();
+        //resetUpdateTime();  Don't need it here, will be called onResume
+        //updateLoc();
 
         Button btn = (Button)findViewById(R.id.checkloc);
         btn.setOnClickListener(updateOnClickListener);
@@ -306,7 +303,8 @@ public class BBAgrid extends Activity {
         Log.d("BBAgrid", "**** onResume");
 
         mForeground = true;
-        resetUpdateTime();
+
+        updateLoc();
     }
 
     /**
@@ -372,10 +370,8 @@ public class BBAgrid extends Activity {
                                + mNWCoords[mCurRow+1][mCurCol+1][1]) / 2.;
         mSouthDist = haversine_dist(southGridLat, lon, lat, lon);
 
-        mDrawGridView.setDistances(mWestDist/BLOCK_SIZE,
-                                   mEastDist/BLOCK_SIZE,
-                                   mNorthDist/BLOCK_SIZE,
-                                   mSouthDist/BLOCK_SIZE);
+        mDrawGridView.setDistances(mWestDist, mEastDist,
+                                   mNorthDist, mSouthDist);
     }
 
     public double haversine_dist(double lat1, double lon1,
@@ -407,29 +403,31 @@ public class BBAgrid extends Activity {
         double mindist = Math.min(mWestDist,
                                   Math.min(mEastDist,
                                            Math.min(mNorthDist, mSouthDist)));
-        Log.d("BBAgrid", "mindist = " + mindist);
+        long msecs;
+
+        Log.d("BBAgrid", "resetUpdateTime, mindist = " + mindist);
         if (mindist > NEAR_BOUNDARY) {
-            Log.d("BBAgrid", "Not near a boundary");
-            mUpdateTime = basetime;
-            return;
-        }
-
-        // We're near a boundary. How near? Adjust update time accordingly.
-        // Figure a typical walking speed is of 50 meters per minute
-        // (just under 2mph).
-
-        // Very near a boundary, we'd like to update so it's unlikely
-        // the user will travel more than 10m before the next update.
-        // At 50 m/min that's about 12 seconds (let's say 10).
-        // Farther away, all that matters is that we haven't gotten
-        // more than 80% of the distance to the boundary before the
-        // next update.
-        long msecs = (long)(mindist * 600.);
-        //Log.d("BBAgrid", "Calculated " + msecs + " msecs");
-        if (msecs > basetime)
             msecs = basetime;
-        else if (msecs < MIN_UPDATE_TIME)
-            msecs = MIN_UPDATE_TIME;
+            Log.d("BBAgrid", "Not near a boundary, using " + msecs);
+        }
+        else {
+            // We're near a boundary. How near? Adjust update time accordingly.
+            // Figure a typical walking speed is of 50 meters per minute
+            // (just under 2mph).
+
+            // Very near a boundary, we'd like to update so it's unlikely
+            // the user will travel more than 10m before the next update.
+            // At 50 m/min that's about 12 seconds (let's say 10).
+            // Farther away, all that matters is that we haven't gotten
+            // more than 80% of the distance to the boundary before the
+            // next update.
+            msecs = (long)(mindist * 600.);
+            //Log.d("BBAgrid", "Calculated " + msecs + " msecs");
+            if (msecs > basetime)
+                msecs = basetime;
+            else if (msecs < MIN_UPDATE_TIME)
+                msecs = MIN_UPDATE_TIME;
+        }
 
         // Has it changed much since the last update?
         // Don't want to be constantly changing the location manager
@@ -442,7 +440,7 @@ public class BBAgrid extends Activity {
                                            mUpdateTime,
                                            0,   //MIN_DISTANCE_CHANGE,
                                            mGPSLocListener);
-            Log.d("BBAgrid", "Changing update time to " + msecs);
+            Log.d("BBAgrid", "*** Changed update time to " + mUpdateTime);
         }
     }
 
@@ -450,7 +448,7 @@ public class BBAgrid extends Activity {
         try {
             locationToGridBlock(loc);
         } catch (final Exception e) {
-            mDrawGridView.setUpperString("Can't get location yet");
+            mDrawGridView.setCommentString("No location yet");
             mDrawGridView.setRowCol(-1, -1);
             mDrawGridView.redraw();
             return;
@@ -459,7 +457,6 @@ public class BBAgrid extends Activity {
 
         // mCurRow and mCurCol, plus mWestDist, etc., are now set.
         if (mCurRow < 0 || mCurCol < 0) {
-            mDrawGridView.setUpperString("Outside the grid");
             mDrawGridView.setRowCol(-1, -1);
             mDrawGridView.redraw();
             return;
@@ -470,8 +467,8 @@ public class BBAgrid extends Activity {
         // For debugging, include the serial of the update
         // and whether it came from the request or the button.
         // Comment this out for real users.
-        mDrawGridView.setLowerString("(" + where + " " + mSequence + ", "
-                                     + (int)(mUpdateTime/1000) + ")");
+        mDrawGridView.setCommentString("(" + where + " " + mSequence + ", "
+                                       + (int)(mUpdateTime/1000) + ")");
 
         mDrawGridView.redraw();
 
@@ -504,7 +501,8 @@ public class BBAgrid extends Activity {
                     // If I ever figure out how to exit an android app,
                     // that's what we should do there. Until then:
                     mLocMgr.removeUpdates(mGPSLocListener);
-                    mDrawGridView.setUpperString("Updating disabled");
+                    mUpdateTime = 0;
+                    mDrawGridView.setCommentString("Not updating");
                     mDrawGridView.redraw();
                 }};
 
@@ -518,8 +516,8 @@ public class BBAgrid extends Activity {
     private void updateLoc() {
         Location loc
             = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        updateText(loc, "button");
         resetUpdateTime();
+        updateText(loc, "manual");
     }
 
     private class MyLocationListener implements LocationListener {

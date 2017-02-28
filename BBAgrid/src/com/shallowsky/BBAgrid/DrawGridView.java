@@ -15,6 +15,9 @@ import android.graphics.Paint;
 import android.text.TextPaint;
 
 public class DrawGridView extends View {
+    // The size of a grid block in meters:
+    private static final double BLOCK_SIZE = 2500.;
+
     int mWidth = 0;
     int mHeight = 0;
 
@@ -27,13 +30,12 @@ public class DrawGridView extends View {
     double mEastDist;
     double mNorthDist;
     double mSouthDist;
-    // Upper and lower strings:
-    String mUpperString = "";
-    String mLowerString = "";
+
+    String mCommentString = "";
 
     int mBlockFontSize = 150;
-    int mUpperFontSize = 100;
-    int mLowerFontSize = 75;
+    int mMediumFontSize = 100;
+    int mCommentFontSize = 80;
 
     public DrawGridView(Context context) {
         super(context);
@@ -50,7 +52,7 @@ public class DrawGridView extends View {
                                             int oldh) {
         mWidth = w;
         mHeight = h;
-        Log.d("BBAgrid", "***** onSizeChanged *****" + w + ", " + h);
+        //Log.d("BBAgrid", "***** onSizeChanged *****" + w + ", " + h);
     }
 
     public void setRowCol(int row, int col) {
@@ -65,12 +67,8 @@ public class DrawGridView extends View {
         mSouthDist = s;
     }
 
-    public void setUpperString(String us) {
-        mUpperString = us;
-    }
-
-    public void setLowerString(String ls) {
-        mLowerString = ls;
+    public void setCommentString(String us) {
+        mCommentString = us;
     }
 
     /**
@@ -88,7 +86,7 @@ public class DrawGridView extends View {
      * Redisplay everything.
      */
     @Override protected void onDraw(Canvas canvas) {
-        Log.d("BBAgrid", "***** onDraw *****");
+        //Log.d("BBAgrid", "***** onDraw *****");
         super.onDraw(canvas);
 
         if (mWidth == 0 || mHeight == 0)
@@ -125,13 +123,46 @@ public class DrawGridView extends View {
         canvas.drawLine(gridLeftX, gridBottomLineY, gridRightX, gridBottomLineY,
                         paint);
 
+        int textx = 10;
+        int texty = mBlockFontSize;
+
+        // The comment string:
+        paint.setColor(Color.WHITE);
+        paint.setTextSize((float)mCommentFontSize);
+        canvas.drawText(mCommentString,
+                        textx, mBlockFontSize + mMediumFontSize,
+                        paint);
+
+        paint.setAntiAlias(true);
+        paint.setColor(Color.WHITE);
+        //paint.setTextSize(16 * getResources().getDisplayMetrics().density);
+        //float height = -paint.ascent() + paint.descent();
+        //Log.d("BBAgrid", "text height is " + height + " = " + height * getResources().getDisplayMetrics().density);
+        paint.setTextSize((float)mBlockFontSize);
+
+        // If we don't have row and column set for some reason,
+        // don't draw any of the rest except upper and lower string.
+        if (mCurRow < 0 || mCurCol < 0) {
+            canvas.drawText("Outside the grid", textx, texty, paint);
+            return;
+        }
+
+        // The grid block we're in:
+        String text = "Block: " + mCurRow + mCurCol;
+        canvas.drawText(text, textx, texty, paint);
+        texty += mBlockFontSize;
+
+        // Done with text. Time for graphics.
+
         // Draw a red circle representing our current position.
         // Distances are floating point in fractions of a grid square.
         //paint.setAntiAlias(false);
         paint.setColor(Color.RED);
         int gridwidth = gridRightLineX - gridLeftLineX;
-        canvas.drawCircle(gridLeftLineX + (int)(mWestDist * gridwidth),
-                          gridTopLineY + (int)(mNorthDist * gridwidth),
+        canvas.drawCircle(gridLeftLineX
+                          + (int)(mWestDist / BLOCK_SIZE * gridwidth),
+                          gridTopLineY
+                          + (int)(mNorthDist / BLOCK_SIZE * gridwidth),
                           30, paint);
 
         // Draw numbers for the current and adjacent grid squares:
@@ -146,29 +177,15 @@ public class DrawGridView extends View {
                         middleTextX, middleTextY - partgridwidth, paint);
         canvas.drawText("" + (mCurRow+1) + mCurCol,
                         middleTextX, middleTextY + partgridwidth, paint);
-        canvas.drawText("" + (mCurRow+1) + mCurCol,
+        canvas.drawText("" + mCurRow + (mCurCol-1),
                         middleTextX - partgridwidth, middleTextY, paint);
-        canvas.drawText("" + (mCurRow+1) + mCurCol,
+        canvas.drawText("" + mCurRow + (mCurCol+1),
                         middleTextX + partgridwidth, middleTextY, paint);
-
-        // Draw the various strings:
-        paint.setAntiAlias(true);
-        paint.setColor(Color.WHITE);
-        //paint.setTextSize(16 * getResources().getDisplayMetrics().density);
-        //float height = -paint.ascent() + paint.descent();
-        //Log.d("BBAgrid", "text height is " + height + " = " + height * getResources().getDisplayMetrics().density);
-
-        int textx = 10;
-        int texty = mBlockFontSize;
-
-        // The grid block we're in:
-        String text = "Block: " + mCurRow + mCurCol;
-        canvas.drawText(text, textx, texty, paint);
-        texty += mBlockFontSize;
 
         // Distances, drawn on the right:
 
-        paint.setTextSize((float)mUpperFontSize);
+        paint.setColor(Color.WHITE);
+        paint.setTextSize((float)mMediumFontSize);
         if (mCurRow >= 0 && mCurCol >= 0) {
             if (mWestDist < mEastDist)
                 text = String.format("\n%1$dm W to %2$d%3$d",
@@ -178,7 +195,7 @@ public class DrawGridView extends View {
                                      (int)mEastDist, mCurRow, mCurCol+1);
             float textwidth = paint.measureText(text);
             canvas.drawText(text, mWidth - textwidth,
-                            mHeight - mUpperFontSize*2, paint);
+                            mHeight - mMediumFontSize - margin, paint);
 
             if (mNorthDist < mSouthDist)
                 text = String.format("\n%1$dm N to %2$d%3$d",
@@ -187,13 +204,7 @@ public class DrawGridView extends View {
                 text = String.format("\n%1$dm S to %2$d%3$d",
                                      (int)mSouthDist, mCurRow+1, mCurCol);
             canvas.drawText(text, mWidth - textwidth,
-                            mHeight - mUpperFontSize, paint);
+                            mHeight - margin, paint);
         }
-
-        paint.setTextSize((float)mUpperFontSize);
-        canvas.drawText(mUpperString, textx, texty, paint);
-
-        paint.setTextSize((float)mLowerFontSize);
-        canvas.drawText(mLowerString, textx, mHeight-mLowerFontSize, paint);
     }
 }
