@@ -5,6 +5,8 @@
    Example with two listeners:
    http://stackoverflow.com/questions/14478179/background-service-with-location-listener-in-android
 
+   - grey out the quit button if we're already not doing updates.
+
    - Change the MIN_DISTANCE_CHANGE if we're near a block boundary:
      maybe to something like half the distance to the nearest boundary,
      or 10m if we're within 100m of a boundary.
@@ -13,11 +15,6 @@
    - investigate going to sleep when the app isn't in the foreground,
      and updating position upon being displayed.
      (But maybe don't make that mandatory, see next item.)
-
-   - Draw a picture of where we are in the grid block relative to other
-     squares (Canvas?
-     https://developer.android.com/reference/android/graphics/drawable/package-summary.html
-     https://developer.android.com/training/custom-views/custom-drawing.html
  */
 
 package com.shallowsky.BBAgrid;
