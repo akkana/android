@@ -25,6 +25,8 @@ import android.app.Activity;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 
 import android.view.View;
 
@@ -74,7 +76,11 @@ public class BBAgrid extends Activity {
 
     private static final int BBA_NOTIFICATION_ID = 1;
 
-    long mUpdateTime = -1;    // -1 means we haven't started updating yet.
+    // Update time: how long between GPS requests?
+    // 0 means we're only requesting manual updates.
+    // Anything positive is the time in milliseconds between updates,
+    // which will be adjusted depending on how close we are to a boundary.
+    long mUpdateTime = UPDATE_TIME_FOREGROUND;
 
     DrawGridView mDrawGridView = null;
     LocationManager mLocMgr;
@@ -99,6 +105,7 @@ public class BBAgrid extends Activity {
     double mSouthDist;
 
     boolean mForeground = true;
+    private SharedPreferences mSharedPreferences;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -276,14 +283,13 @@ public class BBAgrid extends Activity {
         mLocMgr = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
         mGPSLocListener = new MyLocationListener();
 
-        //resetUpdateTime();  Don't need it here, will be called onResume
-        //updateLoc();
-
         Button btn = (Button)findViewById(R.id.checkloc);
-        btn.setOnClickListener(updateOnClickListener);
+        btn.setOnClickListener(checkLocation);
 
-        btn = (Button)findViewById(R.id.quit);
-        btn.setOnClickListener(quitOnClickListener);
+        btn = (Button)findViewById(R.id.toggleChecking);
+        btn.setOnClickListener(toggleChecking);
+
+        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
     }
 
     /********  APP LIFECYCLE FUNCTIONS *******/
@@ -301,7 +307,32 @@ public class BBAgrid extends Activity {
 
         mForeground = true;
 
-        updateLoc();
+        mUpdateTime = mSharedPreferences.getLong("updateTime",
+                                                 UPDATE_TIME_FOREGROUND);
+        // Don't pay attention to the actual update time;
+        // always reset to UPDATE_TIME_FOREGROUND.
+        if (mUpdateTime != 0)
+            mUpdateTime = UPDATE_TIME_FOREGROUND;
+
+        updateButtonState();
+
+        mGPSLocListener.startUpdating();
+    }
+
+    public void updateButtonState() {
+        // Update the state of the buttons according to the update time.
+        // If we're updating, then the check button isn't needed.
+        // If we're not updating, the user will tap Check when they
+        // want a new update.
+        Button toggleBtn = (Button)findViewById(R.id.toggleChecking);
+        Button checkBtn = (Button)findViewById(R.id.checkloc);
+        if (mUpdateTime != 0) {
+            toggleBtn.setText("Stop updating");
+            checkBtn.setEnabled(false);
+        } else {
+            toggleBtn.setText("Start updating");
+            checkBtn.setEnabled(true);
+        }
     }
 
     /**
@@ -315,10 +346,19 @@ public class BBAgrid extends Activity {
         Log.d("BBAgrid", "**** onPause");
 
         mForeground = false;
-        resetUpdateTime();
+        if (mUpdateTime != 0)
+            resetUpdateTime();
+
+        saveUpdateTime();
     }
 
-    /********  END APP LIFECYCLE FUNCTIONS *******/
+    public void saveUpdateTime() {
+        SharedPreferences.Editor editor = mSharedPreferences.edit();
+        editor.putLong("updateTime", mUpdateTime);
+        editor.commit();
+    }
+
+    /********  GEO CALCULATION FUNCTIONS *******/
 
     public void locationToGridBlock(Location loc) {
         // Given a location, figure out what LA-BBA block it's in
@@ -387,6 +427,8 @@ public class BBAgrid extends Activity {
         return EARTH_RADIUS * c;
     }
 
+    /******** FUNCTIONS TO MANAGE UPDATES AND UI *******/
+
     /**
      * Calculate update time according to the base time
      * (which reflects whether we're in foreground or background)
@@ -441,7 +483,7 @@ public class BBAgrid extends Activity {
         }
     }
 
-    public void updateText(Location loc, String where) {
+    public void updateUI(Location loc, String where) {
         try {
             locationToGridBlock(loc);
         } catch (final Exception e) {
@@ -491,37 +533,93 @@ public class BBAgrid extends Activity {
         mSequence += 1;
     }
 
-    private Button.OnClickListener quitOnClickListener
+    // Called when the user taps the Start/Stop checking button.
+    // This should toggle whether we're checking regularly.
+    private Button.OnClickListener toggleChecking
         = new Button.OnClickListener() {
-                @Override
-                public void onClick(View arg0) {
-                    // If I ever figure out how to exit an android app,
-                    // that's what we should do there. Until then:
+            @Override
+            public void onClick(View arg0) {
+                if (mUpdateTime > 0) {
+                    // We were updating, so stop.
                     mLocMgr.removeUpdates(mGPSLocListener);
                     mUpdateTime = 0;
                     mDrawGridView.setCommentString("Not updating");
                     mDrawGridView.redraw();
-                }};
+                }
+                else {
+                    // start updating
+                    mUpdateTime = UPDATE_TIME_FOREGROUND;
+                    mGPSLocListener.startUpdating();
+                }
 
-    private Button.OnClickListener updateOnClickListener
+                // Either way, update the buttons and save the new
+                // update time in preferences,
+                // so if the app exits, we'll start up in the same mode.
+                updateButtonState();
+                saveUpdateTime();
+            }};
+
+    // Called when the user taps the Check Location button.
+    // If we're updating anyway, this should do nothing
+    // (and should be greyed out).
+    // If we're not updating, it should do a single update.
+    private Button.OnClickListener checkLocation
         = new Button.OnClickListener() {
-                @Override
-                public void onClick(View arg0) {
-                    updateLoc();
-                }};
+            @Override
+            public void onClick(View arg0) {
+                if (mUpdateTime != 0) {
+                    Log.d("BBAgrid",
+                          "Check Location should have been greyed out");
+                    return;
+                }
+                // Start a single update, with mUpdateTime = 0
+                mUpdateTime = 0;
+                mGPSLocListener.startUpdating();
+            }};
 
-    private void updateLoc() {
-        Location loc
-            = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        resetUpdateTime();
-        updateText(loc, "manual");
-    }
+    /******** THE LOCATION LISTENER *******/
 
     private class MyLocationListener implements LocationListener {
 
         public void onLocationChanged(Location loc) {
-            updateText(loc, "listener");
+            updateUI(loc, "listener");
+
+            // If mUpdateTime is zero, that probably means that
+            // the user requested a one-time update.
+            // LocationListener has no way to request a one-time update,
+            // so the only option is to set a timeout then remove it
+            // the first time we get called back.
+            if (mUpdateTime == 0)
+                mLocMgr.removeUpdates(mGPSLocListener);
+
+            // Otherwise, reset the update time according to
+            // our distance from a boundary.
+            else
+                resetUpdateTime();
         }
+
+        public void startUpdating() {
+            Location loc
+                = mLocMgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            updateUI(loc, "starting");
+
+            // Start requesting updates. But if mUpdateTime is 0,
+            // we'll stop updating after the first one comes in.
+            mLocMgr.requestLocationUpdates(LocationManager.GPS_PROVIDER,
+                                           UPDATE_TIME_FOREGROUND,
+                                           0,   //MIN_DISTANCE_CHANGE,
+                                           this);
+            Log.d("BBAgrid", "*** Location Listener: startUpdating "
+                  + mUpdateTime);
+        }
+
+        public void stopUpdating() {
+            mLocMgr.removeUpdates(mGPSLocListener);
+            mUpdateTime = 0;
+            Log.d("BBAgrid", "*** Location Listener: stopUpdating");
+        }
+
+        // Methods Java requires we define whether we need them or not:
 
         public void onStatusChanged(String providerStr, int status, Bundle b) {
             /*
