@@ -1592,29 +1592,6 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
     }
     */
 
-    /**
-     * Computes the battery level by registering a receiver to the intent triggered
-     * by a battery status/level change.
-     * Thank you http://mihaifonoage.blogspot.com/2010/02/getting-battery-level-in-android-using.html
-    private void updateBatteryLevel() {
-        BroadcastReceiver batteryLevelReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                context.unregisterReceiver(this);
-                int rawlevel = intent.getIntExtra("level", -1);
-                int scale = intent.getIntExtra("scale", -1);
-                int level = -1;
-                if (rawlevel >= 0 && scale > 0) {
-                    level = (rawlevel * 100) / scale;
-                }
-                mBatteryLevel.setText(level + "%");
-            }
-        };
-        IntentFilter batteryLevelFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        registerReceiver(batteryLevelReceiver, batteryLevelFilter);
-    }
-     */
-
     /********** FeedFetcher interface ******/
 
     /* Initiate fetching feeds.
@@ -1691,7 +1668,9 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
      */
     private void showFeedFetcherProgress() {
 
-        // Pop up a dialog with a textview that we can modify later:
+        Button imgToggle;
+
+        // Does the dialog already exist? Then show it again.
         if (mFeedFetcherDialog != null) {
             mFeedFetcherText.append("\n\nRe-showing the old dialog\n");
 
@@ -1700,7 +1679,14 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
             ScrollView scrollView = (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller);
             if (scrollView != null)
                 scrollView.fullScroll(View.FOCUS_DOWN);
+
+            // We'll need to set the text of the imgToggle button,
+            // so find it now.
+            imgToggle =
+                (Button)mFeedFetcherDialog.findViewById(R.id.ffImgToggle);
         }
+
+        // The dialog didn't exist yet, so create a new dialog.
         else {
             mFeedFetcherDialog = new Dialog(this);
             mFeedFetcherDialog.setTitle("Feed fetcher progress");
@@ -1710,7 +1696,7 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                 (TextView)mFeedFetcherDialog.findViewById(R.id.feedFetcherText);
             mFeedFetcherText.setMovementMethod(new ScrollingMovementMethod());
 
-            Button imgToggle =
+            imgToggle =
                 (Button)mFeedFetcherDialog.findViewById(R.id.ffImgToggle);
             imgToggle.setOnClickListener(new OnClickListener() {
                     public void onClick(View v) {
@@ -1743,6 +1729,17 @@ I/ActivityManager(  818): Process com.shallowsky.FeedViewer (pid 32069) (adj 13)
                                                             (ScrollView)mFeedFetcherDialog.findViewById(R.id.fetcherTextScroller)));
             if (! mFeedFetcher.fetchFeeds())
                 mFeedFetcherText.append("\n\nCouldn't run fetchFeeds\n");
+        }
+
+        // Make sure the Toggle Images button matches the state of
+        // mFeedFetcher. If we've run previously and the user has blocked
+        // images, we want to keep that setting on.
+        if (mFeedFetcher.mFetchImages) {
+            mFeedFetcherText.append("Will be fetching images");
+            imgToggle.setText("No images");
+        } else {
+            mFeedFetcherText.append("Will be SKIPPING images");
+            imgToggle.setText("Images");
         }
 
         mFeedFetcherDialog.show();

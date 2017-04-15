@@ -288,6 +288,16 @@ public class FeedFetcher {
             String manifestURL = feeddir + "MANIFEST";
             String manifest = null;
 
+            // How many failures will we tolerate in a row before we abort?
+            // (Probable sign the network has gone down.)
+            int maxSuccessiveFailures = 3;
+            int successiveFailures = 0;
+
+            // How many total failures will we tolerate before we abort?
+            // (Sign of a generally flaky connection.)
+            int maxTotalFailures = 10;
+            int totalFailures = 0;
+
             // Has feedme already run? Check whether the manifest
             // is already there.
             try {
@@ -337,6 +347,8 @@ public class FeedFetcher {
                     }
                 }
 
+                ////////////////////////////////////////////////////////
+                // Feedme has been initiated.
                 // Now, we wait for MANIFEST to appear,
                 // periodically checking what's in the directory.
                 int delay = 5000;   // polling interval, milliseconds
@@ -422,7 +434,11 @@ public class FeedFetcher {
             }
             Log.d("FeedFetcher", "Fetched complete manifest");
 
+            ////////////////////////////////////////////////////////
+            // Feedme ran and we fetched the manifest.
+            // Now download the files.
             Log.d("FeedFetcher", "\n=======================\nDownloading");
+
             String datedir = mLocalDir + "/" + todayStr + "/";
             File dd = new File(datedir);
             dd.mkdir();
@@ -477,13 +493,28 @@ public class FeedFetcher {
                     FileOutputStream fos = new FileOutputStream(fstat);
                     downloadUrlToFile(furl, fos);
                     fos.close();
+                    successiveFailures = 0;
                 } catch (FileNotFoundException e) {
                     publishProgress("Skipping " + filepath
                                     + ":  FileNotFoundException: "
                                     + fstat);
                     continue;
                 } catch (IOException e) {
-                    return "Couldn't download " + furl + ": IOException";
+                    // The download failed, maybe a network timeout.
+                    // Have we had so many failures that we should give up?
+                    // XXX Would be nice to treat html and images differently,
+                    // be more persistent for HTML.
+                    publishProgress("Couldn't download " + furl
+                                    + ": IOException");
+                    if (++successiveFailures >= maxSuccessiveFailures) {
+                        return "More than " + maxSuccessiveFailures
+                            + " successive download failures: giving up.";
+                    }
+                    if (++totalFailures >= maxTotalFailures) {
+                        return "More than " + maxTotalFailures
+                            + " total download failures: giving up.";
+                    }
+                    continue;
                 }
             }
 
