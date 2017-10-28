@@ -244,6 +244,10 @@ public class FeedViewer extends Activity implements OnGestureListener {
             @Override
             public void onPageFinished(WebView webView, final String url) {
                 mBlockSavingScrollPos = true;
+                // PictureListener is deprecated.
+                // But I haven't found any other way to do this.
+                // Incidentally, to find out what's deprecated:
+                // ant "-Djava.compilerargs=-Xlint:unchecked -Xlint:deprecation" release
                 PictureListener pictureListener = new PictureListener() {
                     @Override
                     @Deprecated
@@ -504,7 +508,7 @@ public class FeedViewer extends Activity implements OnGestureListener {
             try {
                 //Log.d("FeedViewer", "Loading remembered " + mLastUrl);
                 mWebView.loadUrl(mLastUrl);
-                mWebSettings.setDefaultFontSize(mFontSize);
+                mWebSettings.setDefaultFontSize(10 /*mFontSize*/);
 
                 // On the feeds page, we'll set mFeedDir to the first
                 // directory we find. If we have a remembered page,
