@@ -68,6 +68,13 @@
     -->
     <import file="custom_rules.xml" optional="true" />
 
+    <!-- This is an attempt to avoid "[javac] warning: [options] source value 1.5 is obsolete and will be removed in a future release"
+         and "[javac] warning: [options] target value 1.5 is obsolete and will be removed in a future release"
+     -->
+
+    <property name="java.target" value="1.6" />
+    <property name="java.source" value="1.6" />
+
     <!-- Import the actual build file.
 
          To customize existing targets, there are two options:
