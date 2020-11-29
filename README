@@ -1,5 +1,10 @@
 A few small Android projects I've built mostly for my own use.
 
+These projects are old (last maintained in 2017) and built with ant,
+not gradle, so most of them probably won't work with Androids past
+Marshmallow or thereabouts. There's a new version of FeedViewer at
+https://github.com/akkana/FeedViewer
+
 FeedViewer: View RSS feeds created with Feedme.
   Java, Ant build.
 
